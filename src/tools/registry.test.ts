@@ -70,7 +70,7 @@ describe("ToolRegistry", () => {
 
     expect(anthropicTools).toHaveLength(1);
     const tool = anthropicTools[0];
-    expect(tool).toBeDefined();
+    if (!tool) throw new Error("expected tool");
     expect(tool.name).toBe("think");
     expect(tool.description).toBeDefined();
     expect(tool.input_schema.type).toBe("object");
