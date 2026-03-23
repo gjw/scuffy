@@ -9,24 +9,28 @@ import type { ToolCall, ToolResult } from "../tools/types.js";
  * All hooks are optional. Pipeline runs in registration order.
  * Invariant 5: Middleware ordering is explicit.
  */
+
+/** Context passed to beforeLLMCall — middleware can modify messages and system prompt. */
+export interface LLMCallContext {
+  messages: Anthropic.MessageParam[];
+  systemPrompt: string;
+  config: AgentConfig;
+}
+
 export interface Middleware {
   name: string;
-  beforeLLMCall?(messages: Anthropic.MessageParam[], config: AgentConfig): Anthropic.MessageParam[];
+  beforeLLMCall?(ctx: LLMCallContext): LLMCallContext;
   afterLLMResponse?(response: Anthropic.Message): Anthropic.Message;
   beforeToolCall?(call: ToolCall): ToolCall;
   afterToolResult?(call: ToolCall, result: ToolResult): ToolResult;
 }
 
-/** Run a middleware hook across all middleware in order. */
-export function applyBeforeLLMCall(
-  middleware: Middleware[],
-  messages: Anthropic.MessageParam[],
-  config: AgentConfig,
-): Anthropic.MessageParam[] {
-  let result = messages;
+/** Run beforeLLMCall across all middleware in order. */
+export function applyBeforeLLMCall(middleware: Middleware[], ctx: LLMCallContext): LLMCallContext {
+  let result = ctx;
   for (const mw of middleware) {
     if (mw.beforeLLMCall) {
-      result = mw.beforeLLMCall(result, config);
+      result = mw.beforeLLMCall(result);
     }
   }
   return result;

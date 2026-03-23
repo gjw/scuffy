@@ -6,6 +6,9 @@ import type { AgentConfig } from "../config.js";
 import { runAgentLoop } from "../agent/loop.js";
 import type { Middleware } from "../agent/middleware.js";
 import type { Session } from "../agent/types.js";
+import { SessionLogger } from "../logging/session.js";
+import { createLoggingMiddleware } from "../logging/loggingMiddleware.js";
+import { createTimeAwarenessMiddleware } from "../logging/timeAwarenessMiddleware.js";
 import type { ToolRegistry } from "../tools/registry.js";
 
 /**
@@ -27,11 +30,28 @@ export async function startRepl(
     logFile: path.join(config.workingDir, ".scuffy", "sessions", `${sessionId}.jsonl`),
   };
 
+  // Create session logger and middleware
+  const logger = new SessionLogger(session.logFile);
+  const loggingMw = createLoggingMiddleware(logger);
+  const timeAwarenessMw = createTimeAwarenessMiddleware(session);
+
+  // Logging first (Invariant 5), then time awareness, then user-provided middleware
+  const allMiddleware: Middleware[] = [loggingMw, timeAwarenessMw, ...middleware];
+
+  // Log session start
+  logger.log({
+    type: "session_start",
+    sessionId,
+    timestamp: new Date().toISOString(),
+    instruction: "(session started)",
+  });
+
   const rl = readline.createInterface({ input: stdin, output: stdout });
 
   // Clean exit on Ctrl+C
   process.on("SIGINT", () => {
     console.log("\nExiting.");
+    logger.close();
     rl.close();
     process.exit(0);
   });
@@ -56,7 +76,9 @@ export async function startRepl(
     }
 
     try {
-      const result = await runAgentLoop(trimmed, session, registry, middleware, config);
+      const result = await runAgentLoop(trimmed, session, registry, allMiddleware, config, {
+        logger,
+      });
       console.log(`\n${result.response}\n`);
       console.log(
         `[tokens: ${String(result.tokensUsed.in)}/${String(result.tokensUsed.out)}, tools: ${String(result.toolCallCount)}, time: ${String(result.durationMs)}ms]\n`,
@@ -67,6 +89,7 @@ export async function startRepl(
     }
   }
 
+  logger.close();
   console.log("Goodbye.");
   rl.close();
 }

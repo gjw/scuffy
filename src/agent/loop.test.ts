@@ -206,9 +206,9 @@ describe("runAgentLoop", () => {
 
     const mw1: Middleware = {
       name: "mw1",
-      beforeLLMCall(messages) {
+      beforeLLMCall(ctx) {
         callOrder.push("mw1:beforeLLM");
-        return messages;
+        return ctx;
       },
       afterLLMResponse(response) {
         callOrder.push("mw1:afterLLM");
@@ -226,9 +226,9 @@ describe("runAgentLoop", () => {
 
     const mw2: Middleware = {
       name: "mw2",
-      beforeLLMCall(messages) {
+      beforeLLMCall(ctx) {
         callOrder.push("mw2:beforeLLM");
-        return messages;
+        return ctx;
       },
       afterLLMResponse(response) {
         callOrder.push("mw2:afterLLM");

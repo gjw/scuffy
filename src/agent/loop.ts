@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentConfig } from "../config.js";
+import type { SessionLogger } from "../logging/session.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { ToolCall, ToolContext, ToolResult } from "../tools/types.js";
 import { buildSystemPrompt, buildUserMessage } from "./context.js";
@@ -25,11 +26,13 @@ export async function runAgentLoop(
   options?: {
     injections?: ContextInjection[] | undefined;
     client?: Anthropic | undefined;
+    logger?: SessionLogger | undefined;
   },
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const client = options?.client ?? new Anthropic({ apiKey: config.apiKey });
   const anthropicTools = registry.toAnthropicTools();
+  const logger = options?.logger;
 
   const tokensUsed = { in: 0, out: 0 };
   let toolCallCount = 0;
@@ -39,17 +42,21 @@ export async function runAgentLoop(
   session.messages.push({ role: "user", content: userContent });
 
   for (let iteration = 0; iteration < config.maxIterations; iteration++) {
-    const systemPrompt = buildSystemPrompt(config, session);
+    const baseSystemPrompt = buildSystemPrompt(config);
 
-    // Apply beforeLLMCall middleware
-    const messages = applyBeforeLLMCall(middleware, session.messages, config);
+    // Apply beforeLLMCall middleware (can modify messages and system prompt)
+    const llmCtx = applyBeforeLLMCall(middleware, {
+      messages: session.messages,
+      systemPrompt: baseSystemPrompt,
+      config,
+    });
 
     // Call Claude API
     const createParams: Anthropic.MessageCreateParamsNonStreaming = {
       model: config.model,
       max_tokens: config.maxTokens,
-      system: systemPrompt,
-      messages,
+      system: llmCtx.systemPrompt,
+      messages: llmCtx.messages,
     };
     if (anthropicTools.length > 0) {
       createParams.tools = anthropicTools;
@@ -102,7 +109,7 @@ export async function runAgentLoop(
         call = applyBeforeToolCall(middleware, call);
 
         // Execute the tool
-        let result = await executeTool(call, registry, session, config);
+        let result = await executeTool(call, registry, session, config, logger);
 
         // Apply afterToolResult middleware
         result = applyAfterToolResult(middleware, call, result);
@@ -140,6 +147,7 @@ async function executeTool(
   registry: ToolRegistry,
   session: Session,
   config: AgentConfig,
+  logger?: SessionLogger,
 ): Promise<ToolResult> {
   const tool = registry.get(call.name);
   if (!tool) {
@@ -165,9 +173,13 @@ async function executeTool(
     sessionId: session.id,
     workingDir: config.workingDir,
     fileReadTimestamps: session.fileReadTimestamps,
-    log: () => {
-      /* Logging middleware handles this — noop until sc-2bt */
-    },
+    log: logger
+      ? (event) => {
+          logger.log(event);
+        }
+      : () => {
+          /* noop when no logger */
+        },
   };
 
   try {
