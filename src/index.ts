@@ -17,6 +17,7 @@ import { writeFileTool } from "./tools/writeFile.js";
 import { globTool } from "./tools/glob.js";
 import { grepTool } from "./tools/grep.js";
 import { bashTool } from "./tools/bash.js";
+import { createTaskTool } from "./tools/task.js";
 import { startRepl } from "./cli/repl.js";
 
 async function main(): Promise<void> {
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   registry.register(globTool);
   registry.register(grepTool);
   registry.register(bashTool);
+  registry.register(createTaskTool(registry, config));
 
   // Middleware stack (empty until logging middleware is implemented)
   const middleware: Middleware[] = [];
