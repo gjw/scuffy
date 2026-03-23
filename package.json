@@ -1,0 +1,33 @@
+{
+  "name": "scuffy",
+  "version": "0.1.0",
+  "description": "Autonomous coding agent — Gauntlet Shipyard project",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "node --import tsx src/index.ts",
+    "test": "vitest run",
+    "lint": "eslint src/ && prettier --check src/",
+    "lint:fix": "eslint --fix src/ && prettier --write src/"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^25.5.0",
+    "eslint": "^10.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.57.2",
+    "vitest": "^4.1.1"
+  }
+}
