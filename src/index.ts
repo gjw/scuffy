@@ -11,6 +11,9 @@ import type { Middleware } from "./agent/middleware.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { thinkTool } from "./tools/think.js";
 import { listDirTool } from "./tools/listDir.js";
+import { readFileTool } from "./tools/readFile.js";
+import { editFileTool } from "./tools/editFile.js";
+import { writeFileTool } from "./tools/writeFile.js";
 import { startRepl } from "./cli/repl.js";
 
 async function main(): Promise<void> {
@@ -20,6 +23,9 @@ async function main(): Promise<void> {
   const registry = new ToolRegistry();
   registry.register(thinkTool);
   registry.register(listDirTool);
+  registry.register(readFileTool);
+  registry.register(editFileTool);
+  registry.register(writeFileTool);
 
   // Middleware stack (empty until logging middleware is implemented)
   const middleware: Middleware[] = [];
