@@ -268,6 +268,52 @@ registry.register(editFileTool);
 const anthropicTools = registry.toAnthropicTools();
 ```
 
+### How to Add a Tool
+
+Every tool is a single file in `src/tools/` that exports a `Tool` value. Three steps:
+
+**1. Define the Zod schema** — this becomes both the TypeScript type and the JSON Schema
+sent to the Anthropic API.
+
+```typescript
+// src/tools/myTool.ts
+import { z } from "zod";
+import type { Tool, ToolContext, ToolResult } from "./types.js";
+
+const parameters = z.object({
+  target: z.string().describe("What this parameter does — the LLM reads this"),
+  verbose: z.boolean().optional().describe("Optional flag with a default"),
+});
+```
+
+**2. Implement the Tool interface** — `name`, `description`, `parameters`, `execute`.
+
+```typescript
+export const myTool: Tool<typeof parameters> = {
+  name: "myTool",
+  description: "One sentence the LLM uses to decide when to call this tool.",
+  parameters,
+  async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
+    // params is fully typed from the Zod schema
+    // ctx.workingDir, ctx.fileReadTimestamps, ctx.log are available
+    return { content: "result string" };
+    // On error: return { content: "Error: ...", isError: true };
+  },
+};
+```
+
+**3. Register it** — in the startup wiring (`src/index.ts`), add one line:
+
+```typescript
+registry.register(myTool);
+```
+
+That's it. The registry converts the Zod schema to Anthropic's tool format automatically
+(`z.toJSONSchema()`, strip `$schema`). No changes to the agent loop or other tools needed
+(Invariant 4).
+
+**Reference implementation:** `src/tools/think.ts` (~20 lines, simplest possible tool).
+
 ### Context Injection
 
 External context is injected as part of the initial user message, before the
