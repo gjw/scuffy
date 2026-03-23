@@ -20,3 +20,6 @@ workspace/
 
 # Ship reference (cloned externally)
 ship-reference/
+
+# bv (beads viewer) local config and caches
+.bv/
