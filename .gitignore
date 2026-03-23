@@ -1,0 +1,19 @@
+# Build output
+dist/
+node_modules/
+
+# Agent workspace (Ship rebuild, scratch)
+workspace/
+
+# Session logs (JSONL)
+.scuffy/sessions/
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+
+# Ship reference (cloned externally)
+ship-reference/

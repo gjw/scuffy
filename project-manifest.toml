@@ -1,0 +1,19 @@
+[project]
+name = "Scuffy"
+description = "Autonomous coding agent — Gauntlet Shipyard project"
+prefix = "sc"
+glance_hue = 30
+
+[roles]
+tower = true
+trench = true
+herald = false
+warden = false
+
+[build]
+stack = "typescript"
+workflow = "beads"
+
+[beads]
+command = "br"
+sync_command = "br sync --flush-only"
