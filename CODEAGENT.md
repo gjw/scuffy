@@ -5,7 +5,7 @@
 | Agent Architecture | MVP | Complete |
 | File Editing Strategy | MVP | Complete |
 | Multi-Agent Design | MVP | Complete |
-| Trace Links | MVP | Pending (needs agent run) |
+| Trace Links | MVP | Complete |
 | Architecture Decisions | Final Submission | — |
 | Ship Rebuild Log | Final Submission | — |
 | Comparative Analysis | Final Submission | — |
@@ -292,15 +292,21 @@ enforced at MVP.
 
 ## Trace Links (MVP)
 
-> Trace links will be added after running the agent and capturing session logs.
-> Each trace is a JSONL file in `.scuffy/sessions/` containing every event:
-> session_start, llm_request, llm_response, tool_call, tool_result, session_end.
+Session traces are JSONL files in `traces/`. Each line is a structured event:
+`session_start`, `llm_request`, `llm_response`, `tool_call`, `tool_result`,
+`session_end`.
 
-- Trace 1 (normal run): *pending — will link to session log showing a successful
-  multi-step file edit*
-- Trace 2 (different execution path — error, branching condition, or different task
-  type): *pending — will link to session log showing error recovery or subagent
-  spawning*
+- **Trace 1 (normal run):** [`traces/trace-1-normal-edit.jsonl`](traces/trace-1-normal-edit.jsonl)
+  — Agent reads `src/tools/think.ts`, makes a surgical edit to the description
+  string, then re-reads to verify. Three tool calls: `readFile` → `editFile` →
+  `readFile`. Demonstrates the read-before-edit invariant and successful
+  anchor-based replacement.
+
+- **Trace 2 (error recovery):** [`traces/trace-2-error-recovery.jsonl`](traces/trace-2-error-recovery.jsonl)
+  — Agent attempts an edit with a non-existent string (fails: file not read +
+  string not found), then self-corrects by reading the file first and retrying
+  with the correct string. Three tool calls: `editFile` (error) → `readFile` →
+  `editFile` (success). Demonstrates error feedback and LLM self-correction.
 
 ---
 
