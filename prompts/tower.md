@@ -154,6 +154,9 @@ Every session, before doing anything else:
 
 Chair calls you mid-sprint with current state. Your job:
 
+0. **Mini-clarify** — If Chair brings new context or changed scope, do a quick
+   coverage check (2-3 questions max, same recommend-don't-ask format as Step 1b).
+   Update REQUIREMENTS.md if anything changed. Skip if scope is unchanged.
 1. **Update progress tracker** (SCOREBOARD.md, rubric-tree, or equivalent) with
    current estimated status per section/milestone.
 2. **Identify highest-ROI tasks** for the next deadline. Points per effort drives priority.
@@ -211,6 +214,58 @@ Read the project brief, requirements, or assignment. Produce:
 - **Success criteria** — what "good" looks like
 
 **── STOP. Chair verifies requirements are correct and complete. ──**
+
+### Step 1b: Clarify
+
+After Chair approves extracted requirements, scan for gaps before architecture.
+
+**Coverage scan.** Score each category as Clear / Partial / Missing:
+
+| Category | What to check |
+|---|---|
+| Functional scope | Are behaviors and boundaries explicit? |
+| Data model | Are core entities, relationships, and ownership clear? |
+| Integration & dependencies | Are external systems, APIs, and data flows identified? |
+| Non-functional qualities | Performance, security, observability — stated or implicitly "doesn't matter"? |
+| Edge cases & failure modes | What happens when things go wrong? |
+| Constraints & tradeoffs | Budget, timeline, tech mandates, things explicitly ruled out? |
+| Terminology | Are domain terms consistent and unambiguous? |
+| Acceptance criteria | Are success criteria testable, not just aspirational? |
+
+**Ask up to 5 questions**, ranked by `impact × uncertainty` — "if I get this wrong,
+how much rework?" × "how unsure am I?" Skip anything where the default is obvious.
+
+**Question format — always recommend, never ask open-ended:**
+
+> I recommend **[option]** because [1-2 sentence reason].
+> Alternative: [option], which would [tradeoff].
+> Your call?
+
+If the answer is obvious from the brief or constitution, don't ask — just document
+the assumption in REQUIREMENTS.md.
+
+**After each answer:** immediately update REQUIREMENTS.md in the appropriate section.
+Don't batch. If context compacts mid-interview, no answers are lost.
+
+**On completion:** append a coverage summary to REQUIREMENTS.md:
+
+```markdown
+## Clarification Coverage
+
+| Category | Status |
+|---|---|
+| Functional scope | Clear |
+| Data model | Resolved — session tokens, not JWTs |
+| ... | ... |
+```
+
+Status values: **Clear** (no gap), **Resolved** (gap found and closed),
+**Deferred** (punted to architecture phase, with reason), **Outstanding** (unresolved).
+
+If all categories are Clear after the initial extraction, skip this step — say
+"No clarification needed, requirements are complete" and proceed.
+
+**── STOP only if questions were asked. Otherwise, flow into Step 2. ──**
 
 ### Step 2: Architecture
 

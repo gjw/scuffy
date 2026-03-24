@@ -112,10 +112,23 @@ glob, grep, listDir) operate relative to it. A tool MUST NOT access files outsid
 
 ### Ship Reference
 
-The original Ship app is studied for the comparative analysis but is NOT part of this
-repo. It's cloned separately (or accessed via GitHub) when needed. During the rebuild,
-the agent does NOT have access to Ship's source — it builds from a spec/instructions,
-not by copying.
+The reference Ship app (FleetGraph version) lives at `/Users/gjw/dev/FleetGraph/`.
+It is a project management app with an Express API, React frontend, shared types
+package, and a LangGraph-based agent (FleetGraph) — ~360 source files in a pnpm
+monorepo.
+
+**Tiered access during rebuild:**
+
+| Tier | What | How | Why |
+|---|---|---|---|
+| **Injected context** | DB schema, API route definitions, test files | Fed to agent before first instruction | Domain facts + behavioral specs, not implementation decisions |
+| **On-demand reference** | Full FleetGraph source | Agent can read via `readFile` tool | Consult when ambiguous, not copy |
+| **Not provided** | Nothing is off-limits | — | "From scratch" means new output, not blindfolded input |
+
+The initial rebuild instruction frames the task around the schema, API contracts, and
+test expectations — not "reproduce this source." Scuffy decides its own architecture.
+This ensures structural differences for the comparative analysis while allowing the
+agent to self-serve on ambiguity.
 
 ### Submission
 

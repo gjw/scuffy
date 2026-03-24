@@ -260,25 +260,30 @@ Include the issue ID in commit messages: `Fix auth validation (sc-a1b2)`
 ## Finishing Steps
 
 After the core finishing sequence (DoD, change doc, doc hygiene, deployment instructions,
-friction review):
+friction review), do these **in this exact order** — the commit must capture the
+closed bead state:
 
-### Close the Issue
+**1. Close the issue:**
 
 ```bash
 br close <id> --reason "What was built, 1 sentence"
 ```
 
-**Milestone check:** If your task has a milestone label (e.g., `mvp`), check whether
-any open tasks with the same label remain: `br list --json | grep <label>`.
-If all are closed, include in your signal: `Chair: all tasks for <label> milestone resolved.`
-
-### Commit
+**2. Sync and commit** (immediately after close — do NOT commit code separately first):
 
 ```bash
 br sync --flush-only
 git add -A
 git commit -m "Describe what you built (<issue-id>)"
 ```
+
+The commit must include the updated `.beads` state. If you already committed code
+changes earlier in the session, that's fine — but this final commit must capture
+the bead close. Never leave a dirty `.beads` directory.
+
+**3. Milestone check:** If your task has a milestone label (e.g., `mvp`), check whether
+any open tasks with the same label remain: `br list --json | grep <label>`.
+If all are closed, include in your signal: `Chair: all tasks for <label> milestone resolved.`
 
 ### Signal and Stop
 
