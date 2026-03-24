@@ -4,9 +4,32 @@
  * Entry point. Wires up the tool registry, middleware stack, and REPL.
  */
 
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "./config.js";
+
+/** Load .env file into process.env. Does not override existing vars. */
+function loadDotenv(dir: string): void {
+  try {
+    const content = readFileSync(path.join(dir, ".env"), "utf-8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIdx = trimmed.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).trim();
+      const value = trimmed.slice(eqIdx + 1).trim();
+      if (!(key in process.env)) {
+        process.env[key] = value;
+      }
+    }
+  } catch {
+    // No .env file — that's fine, rely on environment
+  }
+}
+
+loadDotenv(process.cwd());
 import type { Middleware } from "./agent/middleware.js";
 import { ToolRegistry } from "./tools/registry.js";
 import { thinkTool } from "./tools/think.js";
