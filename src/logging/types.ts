@@ -52,6 +52,12 @@ export type ToolResultEvent = {
   durationMs: number;
 };
 
+export type UserInstructionEvent = {
+  type: "user_instruction";
+  timestamp: string;
+  instruction: string;
+};
+
 export type SessionEndEvent = {
   type: "session_end";
   timestamp: string;
@@ -61,6 +67,7 @@ export type SessionEndEvent = {
 
 export type LogEvent =
   | SessionStartEvent
+  | UserInstructionEvent
   | LLMRequestEvent
   | LLMResponseEvent
   | ToolCallEvent

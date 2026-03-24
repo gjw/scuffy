@@ -75,6 +75,12 @@ export async function startRepl(
       break;
     }
 
+    logger.log({
+      type: "user_instruction",
+      timestamp: new Date().toISOString(),
+      instruction: trimmed,
+    });
+
     try {
       const result = await runAgentLoop(trimmed, session, registry, allMiddleware, config, {
         logger,
