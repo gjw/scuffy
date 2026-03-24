@@ -1,0 +1,22 @@
+[Unit]
+Description=Scuffy autonomous coding agent
+After=network.target
+
+[Service]
+Type=simple
+User=scuffy
+WorkingDirectory=/opt/scuffy
+ExecStart=/usr/bin/node --import tsx src/serve.ts
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=SCUFFY_PORT=3000
+EnvironmentFile=/opt/scuffy/.env
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/scuffy
+
+[Install]
+WantedBy=multi-user.target

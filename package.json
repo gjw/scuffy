@@ -10,18 +10,25 @@
     "dev": "node --import tsx src/index.ts",
     "test": "vitest run",
     "lint": "eslint src/ && prettier --check src/",
-    "lint:fix": "eslint --fix src/ && prettier --write src/"
+    "lint:fix": "eslint --fix src/ && prettier --write src/",
+    "serve": "node --import tsx src/serve.ts"
   },
   "engines": {
     "node": ">=24"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.2.1",
+    "ws": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.5.0",
+    "@types/ws": "^8.18.1",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.1",
