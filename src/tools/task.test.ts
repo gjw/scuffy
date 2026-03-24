@@ -96,7 +96,8 @@ describe("task tool", () => {
     // Verify runAgentLoop was called with correct args
     expect(mockLoop).toHaveBeenCalledOnce();
     const callArgs = mockLoop.mock.calls[0];
-    const [instruction, session, reg, mw, cfg] = callArgs ?? [];
+    if (!callArgs) throw new Error("expected call args");
+    const [instruction, session, reg, mw, cfg] = callArgs;
     expect(instruction).toBe("Count lines in foo.txt");
     expect(session.messages).toEqual([]); // fresh session
     expect(session.id).toBeTruthy();
@@ -138,6 +139,7 @@ describe("task tool", () => {
 
     const sessionA = mockLoop.mock.calls[0]?.[1];
     const sessionB = mockLoop.mock.calls[1]?.[1];
+    if (!sessionA || !sessionB) throw new Error("expected sessions");
     expect(sessionA.id).not.toBe(sessionB.id);
   });
 
@@ -157,6 +159,7 @@ describe("task tool", () => {
     await tool.execute({ name: "test", prompt: "do it" }, makeCtx());
 
     const session = mockLoop.mock.calls[0]?.[1];
+    if (!session) throw new Error("expected session");
     expect(path.basename(session.logFile)).toMatch(/^sub-/);
   });
 });
