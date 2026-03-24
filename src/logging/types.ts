@@ -50,6 +50,7 @@ export type ToolResultEvent = {
   output: string;
   isError: boolean;
   durationMs: number;
+  metadata?: Record<string, unknown> | undefined;
 };
 
 export type UserInstructionEvent = {

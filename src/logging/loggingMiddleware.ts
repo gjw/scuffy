@@ -75,6 +75,7 @@ export function createLoggingMiddleware(logger: SessionLogger): Middleware {
         output: result.content,
         isError: result.isError ?? false,
         durationMs: Date.now() - start,
+        metadata: result.metadata,
       });
 
       return result;
