@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMMessage } from "../providers/types.js";
 
 /**
  * Agent session and result types.
@@ -8,7 +8,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 export interface Session {
   id: string;
   startedAt: Date;
-  messages: Anthropic.MessageParam[];
+  messages: LLMMessage[];
   /** Tracks which files have been read and when. Enforces read-before-edit. */
   fileReadTimestamps: Map<string, number>;
   logFile: string;

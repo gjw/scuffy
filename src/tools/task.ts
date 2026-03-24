@@ -7,6 +7,7 @@ import { createLoggingMiddleware } from "../logging/loggingMiddleware.js";
 import { SessionLogger } from "../logging/session.js";
 import { createTimeAwarenessMiddleware } from "../logging/timeAwarenessMiddleware.js";
 import type { Session } from "../agent/types.js";
+import type { LLMProvider } from "../providers/types.js";
 import type { ToolRegistry } from "./registry.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
@@ -28,6 +29,7 @@ const parameters = z.object({
 export function createTaskTool(
   registry: ToolRegistry,
   config: AgentConfig,
+  provider: LLMProvider,
 ): Tool<typeof parameters> {
   return {
     name: "task",
@@ -69,6 +71,7 @@ export function createTaskTool(
 
       try {
         const result = await runAgentLoop(params.prompt, session, registry, middleware, config, {
+          provider,
           logger,
         });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMProvider, LLMResponse, ToolResultBlock } from "../providers/types.js";
 import { runAgentLoop } from "./loop.js";
 import type { Session } from "./types.js";
 import type { Middleware } from "./middleware.js";
@@ -21,73 +21,62 @@ function makeSession(): Session {
 /** Create a minimal test config. */
 function makeConfig(overrides?: Partial<AgentConfig>): AgentConfig {
   return {
+    provider: "anthropic",
     model: "test-model",
     maxTokens: 1024,
     maxIterations: 10,
     systemPrompt: "You are a test agent.",
     workingDir: "/tmp",
-    apiKey: "test-key",
+    anthropicApiKey: "test-key",
     ...overrides,
   };
 }
 
-/** Build a mock Anthropic message response. Cast to Message to avoid chasing SDK type details. */
-function makeTextResponse(text: string): Anthropic.Message {
+/** Build a mock LLMResponse with text content. */
+function makeTextResponse(text: string): LLMResponse {
   return {
-    id: "msg_test",
-    type: "message",
-    role: "assistant",
-    model: "test-model",
-    content: [{ type: "text", text, citations: null }],
-    stop_reason: "end_turn",
-    stop_sequence: null,
-    usage: { input_tokens: 10, output_tokens: 5 },
-  } as unknown as Anthropic.Message;
+    content: [{ type: "text", text }],
+    stopReason: "end_turn",
+    usage: { inputTokens: 10, outputTokens: 5 },
+  };
 }
 
 function makeToolUseResponse(
   toolCalls: Array<{ id: string; name: string; input: unknown }>,
-): Anthropic.Message {
+): LLMResponse {
   return {
-    id: "msg_test",
-    type: "message",
-    role: "assistant",
-    model: "test-model",
     content: toolCalls.map((tc) => ({
       type: "tool_use" as const,
       id: tc.id,
       name: tc.name,
       input: tc.input,
     })),
-    stop_reason: "tool_use",
-    stop_sequence: null,
-    usage: { input_tokens: 15, output_tokens: 10 },
-  } as unknown as Anthropic.Message;
+    stopReason: "tool_use",
+    usage: { inputTokens: 15, outputTokens: 10 },
+  };
 }
 
-/** Create a mock Anthropic client with canned responses. */
-function makeMockClient(responses: Anthropic.Message[]): Anthropic {
+/** Create a mock LLMProvider with canned responses. */
+function makeMockProvider(responses: LLMResponse[]): LLMProvider {
   let callIndex = 0;
   return {
-    messages: {
-      create: vi.fn(() => {
-        const response = responses[callIndex];
-        if (!response) throw new Error(`No mock response for call index ${String(callIndex)}`);
-        callIndex++;
-        return Promise.resolve(response);
-      }),
-    },
-  } as unknown as Anthropic;
+    createCompletion: vi.fn(() => {
+      const response = responses[callIndex];
+      if (!response) throw new Error(`No mock response for call index ${String(callIndex)}`);
+      callIndex++;
+      return Promise.resolve(response);
+    }),
+  };
 }
 
 describe("runAgentLoop", () => {
   it("returns text response when LLM responds immediately", async () => {
-    const client = makeMockClient([makeTextResponse("Hello!")]);
+    const provider = makeMockProvider([makeTextResponse("Hello!")]);
     const registry = new ToolRegistry();
     const session = makeSession();
     const config = makeConfig();
 
-    const result = await runAgentLoop("Say hello", session, registry, [], config, { client });
+    const result = await runAgentLoop("Say hello", session, registry, [], config, { provider });
 
     expect(result.response).toBe("Hello!");
     expect(result.toolCallCount).toBe(0);
@@ -96,7 +85,7 @@ describe("runAgentLoop", () => {
   });
 
   it("executes a tool call and returns final response", async () => {
-    const client = makeMockClient([
+    const provider = makeMockProvider([
       makeToolUseResponse([
         { id: "call_1", name: "think", input: { thought: "Let me consider..." } },
       ]),
@@ -108,7 +97,7 @@ describe("runAgentLoop", () => {
     const config = makeConfig();
 
     const result = await runAgentLoop("Think about this", session, registry, [], config, {
-      client,
+      provider,
     });
 
     expect(result.response).toBe("Done thinking.");
@@ -118,7 +107,7 @@ describe("runAgentLoop", () => {
   });
 
   it("handles multiple parallel tool calls", async () => {
-    const client = makeMockClient([
+    const provider = makeMockProvider([
       makeToolUseResponse([
         { id: "call_1", name: "think", input: { thought: "First thought" } },
         { id: "call_2", name: "think", input: { thought: "Second thought" } },
@@ -130,14 +119,14 @@ describe("runAgentLoop", () => {
     const session = makeSession();
     const config = makeConfig();
 
-    const result = await runAgentLoop("Think twice", session, registry, [], config, { client });
+    const result = await runAgentLoop("Think twice", session, registry, [], config, { provider });
 
     expect(result.response).toBe("Both done.");
     expect(result.toolCallCount).toBe(2);
   });
 
   it("returns error for unknown tool", async () => {
-    const client = makeMockClient([
+    const provider = makeMockProvider([
       makeToolUseResponse([{ id: "call_1", name: "nonexistent", input: {} }]),
       makeTextResponse("I see the error."),
     ]);
@@ -146,7 +135,7 @@ describe("runAgentLoop", () => {
     const session = makeSession();
     const config = makeConfig();
 
-    const result = await runAgentLoop("Try bad tool", session, registry, [], config, { client });
+    const result = await runAgentLoop("Try bad tool", session, registry, [], config, { provider });
 
     expect(result.response).toBe("I see the error.");
     // Verify the tool result was an error
@@ -156,7 +145,7 @@ describe("runAgentLoop", () => {
     const content = toolResultMsg?.content;
     expect(Array.isArray(content)).toBe(true);
     if (Array.isArray(content)) {
-      const toolResult = content[0] as Anthropic.ToolResultBlockParam;
+      const toolResult = content[0] as ToolResultBlock;
       expect(toolResult.is_error).toBe(true);
       expect(typeof toolResult.content).toBe("string");
       expect(toolResult.content).toContain("unknown tool");
@@ -164,7 +153,7 @@ describe("runAgentLoop", () => {
   });
 
   it("returns error for invalid tool parameters", async () => {
-    const client = makeMockClient([
+    const provider = makeMockProvider([
       makeToolUseResponse([{ id: "call_1", name: "think", input: { wrong_param: 123 } }]),
       makeTextResponse("Got the error."),
     ]);
@@ -173,12 +162,12 @@ describe("runAgentLoop", () => {
     const session = makeSession();
     const config = makeConfig();
 
-    const result = await runAgentLoop("Bad params", session, registry, [], config, { client });
+    const result = await runAgentLoop("Bad params", session, registry, [], config, { provider });
 
     expect(result.response).toBe("Got the error.");
     const toolResultMsg = session.messages[2];
     if (Array.isArray(toolResultMsg?.content)) {
-      const toolResult = toolResultMsg.content[0] as Anthropic.ToolResultBlockParam;
+      const toolResult = toolResultMsg.content[0] as ToolResultBlock;
       expect(toolResult.is_error).toBe(true);
       expect(toolResult.content).toContain("invalid parameters");
     }
@@ -189,13 +178,13 @@ describe("runAgentLoop", () => {
     const infiniteToolCalls = Array.from({ length: 5 }, () =>
       makeToolUseResponse([{ id: "call_loop", name: "think", input: { thought: "looping" } }]),
     );
-    const client = makeMockClient(infiniteToolCalls);
+    const provider = makeMockProvider(infiniteToolCalls);
     const registry = new ToolRegistry();
     registry.register(thinkTool);
     const session = makeSession();
     const config = makeConfig({ maxIterations: 3 });
 
-    const result = await runAgentLoop("Loop forever", session, registry, [], config, { client });
+    const result = await runAgentLoop("Loop forever", session, registry, [], config, { provider });
 
     expect(result.response).toContain("maximum iterations");
     expect(result.toolCallCount).toBe(3);
@@ -236,7 +225,7 @@ describe("runAgentLoop", () => {
       },
     };
 
-    const client = makeMockClient([
+    const provider = makeMockProvider([
       makeToolUseResponse([{ id: "call_1", name: "think", input: { thought: "test" } }]),
       makeTextResponse("Done."),
     ]);
@@ -245,7 +234,7 @@ describe("runAgentLoop", () => {
     const session = makeSession();
     const config = makeConfig();
 
-    await runAgentLoop("Test middleware", session, registry, [mw1, mw2], config, { client });
+    await runAgentLoop("Test middleware", session, registry, [mw1, mw2], config, { provider });
 
     // First LLM call: both beforeLLM, both afterLLM, then tool hooks (mw1 only)
     expect(callOrder).toEqual([
@@ -265,13 +254,13 @@ describe("runAgentLoop", () => {
 
   it("includes context injections in user message", async () => {
     const createFn = vi.fn(() => Promise.resolve(makeTextResponse("Got it.")));
-    const client = { messages: { create: createFn } } as unknown as Anthropic;
+    const provider: LLMProvider = { createCompletion: createFn };
     const registry = new ToolRegistry();
     const session = makeSession();
     const config = makeConfig();
 
     await runAgentLoop("Do the thing", session, registry, [], config, {
-      client,
+      provider,
       injections: [{ type: "specification", label: "Auth spec", content: "Users must log in." }],
     });
 

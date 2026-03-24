@@ -3,10 +3,15 @@ import { mkdtemp, mkdir } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import type { AgentConfig } from "../config.js";
+import type { LLMProvider } from "../providers/types.js";
 import type { ToolContext } from "./types.js";
 import { ToolRegistry } from "./registry.js";
 import { thinkTool } from "./think.js";
 import { createTaskTool } from "./task.js";
+
+const mockProvider: LLMProvider = {
+  createCompletion: vi.fn(),
+};
 
 // Mock runAgentLoop to avoid real API calls
 vi.mock("../agent/loop.js", () => ({
@@ -42,12 +47,13 @@ function makeCtx(): ToolContext {
 
 function makeConfig(workingDir: string): AgentConfig {
   return {
+    provider: "anthropic",
     model: "claude-sonnet-4-6",
     maxTokens: 4096,
     maxIterations: 10,
     systemPrompt: "",
     workingDir,
-    apiKey: "test-key",
+    anthropicApiKey: "test-key",
   };
 }
 
@@ -63,7 +69,7 @@ describe("task tool", () => {
   it("has correct name and description", () => {
     const registry = new ToolRegistry();
     registry.register(thinkTool);
-    const tool = createTaskTool(registry, makeConfig(tmpDir));
+    const tool = createTaskTool(registry, makeConfig(tmpDir), mockProvider);
     expect(tool.name).toBe("task");
     expect(tool.description).toContain("subagent");
   });
@@ -80,7 +86,7 @@ describe("task tool", () => {
 
     const registry = new ToolRegistry();
     registry.register(thinkTool);
-    const tool = createTaskTool(registry, makeConfig(tmpDir));
+    const tool = createTaskTool(registry, makeConfig(tmpDir), mockProvider);
 
     const result = await tool.execute(
       { name: "read-counter", prompt: "Count lines in foo.txt" },
@@ -103,7 +109,7 @@ describe("task tool", () => {
     expect(session.id).toBeTruthy();
     expect(reg).toBe(registry); // same registry
     expect(mw).toHaveLength(2); // logging + time awareness
-    expect(cfg.apiKey).toBe("test-key");
+    expect(cfg.anthropicApiKey).toBe("test-key");
   });
 
   it("returns error when subagent throws", async () => {
@@ -112,7 +118,7 @@ describe("task tool", () => {
     mockLoop.mockRejectedValueOnce(new Error("API rate limit"));
 
     const registry = new ToolRegistry();
-    const tool = createTaskTool(registry, makeConfig(tmpDir));
+    const tool = createTaskTool(registry, makeConfig(tmpDir), mockProvider);
 
     const result = await tool.execute({ name: "failing-task", prompt: "do something" }, makeCtx());
 
@@ -132,7 +138,7 @@ describe("task tool", () => {
     });
 
     const registry = new ToolRegistry();
-    const tool = createTaskTool(registry, makeConfig(tmpDir));
+    const tool = createTaskTool(registry, makeConfig(tmpDir), mockProvider);
 
     await tool.execute({ name: "a", prompt: "task a" }, makeCtx());
     await tool.execute({ name: "b", prompt: "task b" }, makeCtx());
@@ -154,7 +160,7 @@ describe("task tool", () => {
     });
 
     const registry = new ToolRegistry();
-    const tool = createTaskTool(registry, makeConfig(tmpDir));
+    const tool = createTaskTool(registry, makeConfig(tmpDir), mockProvider);
 
     await tool.execute({ name: "test", prompt: "do it" }, makeCtx());
 

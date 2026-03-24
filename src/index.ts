@@ -52,6 +52,9 @@ import { finishBeadTool } from "./tools/finishBead.js";
 import { escalateTool } from "./tools/escalate.js";
 import { startRepl } from "./cli/repl.js";
 import { runHeadless } from "./cli/headless.js";
+import { AnthropicProvider } from "./providers/anthropic.js";
+import { OpenAIProvider } from "./providers/openai.js";
+import type { LLMProvider } from "./providers/types.js";
 
 const HEADLESS_SYSTEM_PROMPT = `You are Scuffy, an autonomous coding agent running in headless mode.
 You have one job per session: find the next bead, implement it, and exit.
@@ -98,6 +101,16 @@ async function main(): Promise<void> {
   if (args.headless) overrides.systemPrompt = HEADLESS_SYSTEM_PROMPT;
   const config = loadConfig(overrides);
 
+  // Create LLM provider (loadConfig validates the required key is present)
+  let provider: LLMProvider;
+  if (config.provider === "openai") {
+    if (!config.openaiApiKey) throw new Error("OPENAI_API_KEY is required");
+    provider = new OpenAIProvider(config.openaiApiKey);
+  } else {
+    if (!config.anthropicApiKey) throw new Error("ANTHROPIC_API_KEY is required");
+    provider = new AnthropicProvider(config.anthropicApiKey);
+  }
+
   // Register available tools
   const registry = new ToolRegistry();
   registry.register(thinkTool);
@@ -108,7 +121,7 @@ async function main(): Promise<void> {
   registry.register(globTool);
   registry.register(grepTool);
   registry.register(bashTool);
-  registry.register(createTaskTool(registry, config));
+  registry.register(createTaskTool(registry, config, provider));
   registry.register(finishBeadTool);
   registry.register(escalateTool);
 
@@ -121,11 +134,11 @@ async function main(): Promise<void> {
   if (args.headless) {
     const instruction =
       args.instruction ?? process.env["SCUFFY_INSTRUCTION"] ?? DEFAULT_HEADLESS_INSTRUCTION;
-    await runHeadless(registry, middleware, config, instruction);
+    await runHeadless(registry, middleware, config, provider, instruction);
   } else {
-    console.log(`Scuffy agent (${config.model})`);
+    console.log(`Scuffy agent (${config.provider}/${config.model})`);
     console.log(`Working directory: ${config.workingDir}`);
-    await startRepl(registry, middleware, config);
+    await startRepl(registry, middleware, config, provider);
   }
 }
 

@@ -7,6 +7,7 @@ import type { Session } from "../agent/types.js";
 import { SessionLogger } from "../logging/session.js";
 import { createLoggingMiddleware } from "../logging/loggingMiddleware.js";
 import { createTimeAwarenessMiddleware } from "../logging/timeAwarenessMiddleware.js";
+import type { LLMProvider } from "../providers/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
 
 /**
@@ -17,6 +18,7 @@ export async function runHeadless(
   registry: ToolRegistry,
   middleware: Middleware[],
   config: AgentConfig,
+  provider: LLMProvider,
   instruction: string,
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
@@ -48,6 +50,7 @@ export async function runHeadless(
   console.log(`Working directory: ${config.workingDir}`);
 
   const result = await runAgentLoop(instruction, session, registry, allMiddleware, config, {
+    provider,
     logger,
   });
 

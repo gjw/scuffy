@@ -1,6 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
 import type { AgentConfig } from "../config.js";
 import type { SessionLogger } from "../logging/session.js";
+import type { LLMProvider, TextBlock, ToolUseBlock } from "../providers/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { ToolCall, ToolContext, ToolResult } from "../tools/types.js";
 import { buildSystemPrompt, buildUserMessage } from "./context.js";
@@ -14,7 +14,7 @@ import {
 import type { AgentResult, ContextInjection, Session } from "./types.js";
 
 /**
- * Core agent loop: assemble messages → call Claude → execute tool calls → repeat.
+ * Core agent loop: assemble messages → call LLM → execute tool calls → repeat.
  * Terminates when the LLM produces a text response or maxIterations is reached.
  */
 export async function runAgentLoop(
@@ -25,20 +25,23 @@ export async function runAgentLoop(
   config: AgentConfig,
   options?: {
     injections?: ContextInjection[] | undefined;
-    client?: Anthropic | undefined;
+    provider?: LLMProvider | undefined;
     logger?: SessionLogger | undefined;
   },
 ): Promise<AgentResult> {
   const startTime = Date.now();
-  const client = options?.client ?? new Anthropic({ apiKey: config.apiKey });
-  const anthropicTools = registry.toAnthropicTools();
-  const logger = options?.logger;
+  if (!options?.provider) {
+    throw new Error("LLMProvider is required — pass it in options.provider");
+  }
+  const provider = options.provider;
+  const toolDefs = registry.toToolDefs();
+  const logger = options.logger;
 
   const tokensUsed = { in: 0, out: 0 };
   let toolCallCount = 0;
 
   // Build the initial user message with context injections
-  const userContent = buildUserMessage(instruction, options?.injections);
+  const userContent = buildUserMessage(instruction, options.injections);
   session.messages.push({ role: "user", content: userContent });
 
   for (let iteration = 0; iteration < config.maxIterations; iteration++) {
@@ -51,32 +54,32 @@ export async function runAgentLoop(
       config,
     });
 
-    // Call Claude API
-    const createParams: Anthropic.MessageCreateParamsNonStreaming = {
+    // Call LLM via provider
+    const completionParams: Parameters<LLMProvider["createCompletion"]>[0] = {
       model: config.model,
-      max_tokens: config.maxTokens,
+      maxTokens: config.maxTokens,
       system: llmCtx.systemPrompt,
       messages: llmCtx.messages,
     };
-    if (anthropicTools.length > 0) {
-      createParams.tools = anthropicTools;
+    if (toolDefs.length > 0) {
+      completionParams.tools = toolDefs;
     }
-    const rawResponse = await client.messages.create(createParams);
+    const rawResponse = await provider.createCompletion(completionParams);
 
     // Apply afterLLMResponse middleware
     const response = applyAfterLLMResponse(middleware, rawResponse);
 
     // Accumulate token usage
-    tokensUsed.in += response.usage.input_tokens;
-    tokensUsed.out += response.usage.output_tokens;
+    tokensUsed.in += response.usage.inputTokens;
+    tokensUsed.out += response.usage.outputTokens;
 
     // Append assistant message to history
     session.messages.push({ role: "assistant", content: response.content });
 
     // If the LLM is done (text response), extract and return
-    if (response.stop_reason === "end_turn" || response.stop_reason === "max_tokens") {
+    if (response.stopReason === "end_turn" || response.stopReason === "max_tokens") {
       const textBlocks = response.content.filter(
-        (block): block is Anthropic.TextBlock => block.type === "text",
+        (block): block is TextBlock => block.type === "text",
       );
       const responseText = textBlocks.map((b) => b.text).join("\n");
 
@@ -88,13 +91,18 @@ export async function runAgentLoop(
       };
     }
 
-    // If the LLM wants to use tools, execute them
-    if (response.stop_reason === "tool_use") {
+    // LLM wants to use tools — execute them
+    {
       const toolUseBlocks = response.content.filter(
-        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
+        (block): block is ToolUseBlock => block.type === "tool_use",
       );
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      const toolResults: Array<{
+        type: "tool_result";
+        tool_use_id: string;
+        content: string;
+        is_error: boolean;
+      }> = [];
 
       for (const toolUse of toolUseBlocks) {
         toolCallCount++;
@@ -144,12 +152,7 @@ export async function runAgentLoop(
 
       // Append tool results as a user message
       session.messages.push({ role: "user", content: toolResults });
-
-      continue;
     }
-
-    // Unknown stop reason — break out
-    break;
   }
 
   // maxIterations exceeded or unexpected stop

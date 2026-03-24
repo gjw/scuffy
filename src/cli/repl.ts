@@ -9,6 +9,7 @@ import type { Session } from "../agent/types.js";
 import { SessionLogger } from "../logging/session.js";
 import { createLoggingMiddleware } from "../logging/loggingMiddleware.js";
 import { createTimeAwarenessMiddleware } from "../logging/timeAwarenessMiddleware.js";
+import type { LLMProvider } from "../providers/types.js";
 import type { ToolRegistry } from "../tools/registry.js";
 
 /**
@@ -20,6 +21,7 @@ export async function startRepl(
   registry: ToolRegistry,
   middleware: Middleware[],
   config: AgentConfig,
+  provider: LLMProvider,
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
   const session: Session = {
@@ -83,6 +85,7 @@ export async function startRepl(
 
     try {
       const result = await runAgentLoop(trimmed, session, registry, allMiddleware, config, {
+        provider,
         logger,
       });
       console.log(`\n${result.response}\n`);

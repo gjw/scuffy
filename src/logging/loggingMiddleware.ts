@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMResponse, TextBlock, ToolUseBlock } from "../providers/types.js";
 import type { LLMCallContext, Middleware } from "../agent/middleware.js";
 import type { ToolCall, ToolResult } from "../tools/types.js";
 import type { SessionLogger } from "./session.js";
@@ -27,16 +27,16 @@ export function createLoggingMiddleware(logger: SessionLogger): Middleware {
       return ctx;
     },
 
-    afterLLMResponse(response: Anthropic.Message): Anthropic.Message {
+    afterLLMResponse(response: LLMResponse): LLMResponse {
       const durationMs = Date.now() - llmCallStart;
 
       const textContent = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
+        .filter((b): b is TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n");
 
       const toolCalls: ToolCallSummary[] = response.content
-        .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+        .filter((b): b is ToolUseBlock => b.type === "tool_use")
         .map((b) => ({ id: b.id, tool: b.name, input: b.input }));
 
       logger.log({
@@ -44,8 +44,8 @@ export function createLoggingMiddleware(logger: SessionLogger): Middleware {
         timestamp: new Date().toISOString(),
         content: textContent,
         toolCalls,
-        tokensIn: response.usage.input_tokens,
-        tokensOut: response.usage.output_tokens,
+        tokensIn: response.usage.inputTokens,
+        tokensOut: response.usage.outputTokens,
         durationMs,
       });
 

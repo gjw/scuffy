@@ -1,10 +1,10 @@
 import { z } from "zod";
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMToolDef } from "../providers/types.js";
 import type { Tool } from "./types.js";
 
 /**
  * Tool registry — stores tools, looks them up by name, and converts
- * Zod schemas to Anthropic API tool definitions.
+ * Zod schemas to provider-agnostic tool definitions.
  *
  * Invariant 4: Adding or removing a tool must not require changes to
  * the agent loop, middleware, or any other tool. The registry is the
@@ -36,18 +36,18 @@ export class ToolRegistry {
     return [...this.tools.values()];
   }
 
-  /** Convert all registered tools to Anthropic API tool definitions. */
-  toAnthropicTools(): Anthropic.Tool[] {
+  /** Convert all registered tools to provider-agnostic tool definitions. */
+  toToolDefs(): LLMToolDef[] {
     return this.getAll().map((tool) => {
       const jsonSchema = z.toJSONSchema(tool.parameters);
 
-      // Strip $schema — Anthropic's input_schema doesn't use it
+      // Strip $schema — not needed for LLM tool definitions
       const { $schema: _, ...inputSchema } = jsonSchema as Record<string, unknown>;
 
       return {
         name: tool.name,
         description: tool.description,
-        input_schema: inputSchema as Anthropic.Tool.InputSchema,
+        inputSchema,
       };
     });
   }

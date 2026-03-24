@@ -64,20 +64,22 @@ describe("ToolRegistry", () => {
     expect(all.map((t) => t.name).sort()).toEqual(["a", "b"]);
   });
 
-  it("converts to Anthropic tool format", () => {
+  it("converts to provider-agnostic tool definitions", () => {
     registry.register(thinkTool);
-    const anthropicTools = registry.toAnthropicTools();
+    const toolDefs = registry.toToolDefs();
 
-    expect(anthropicTools).toHaveLength(1);
-    const tool = anthropicTools[0];
+    expect(toolDefs).toHaveLength(1);
+    const tool = toolDefs[0];
     if (!tool) throw new Error("expected tool");
     expect(tool.name).toBe("think");
     expect(tool.description).toBeDefined();
-    expect(tool.input_schema.type).toBe("object");
-    expect(tool.input_schema.properties).toBeDefined();
-    expect(tool.input_schema.required).toContain("thought");
+    expect(tool.inputSchema["type"]).toBe("object");
+    expect(tool.inputSchema["properties"]).toBeDefined();
+    const required = tool.inputSchema["required"];
+    expect(Array.isArray(required)).toBe(true);
+    expect(required as unknown[]).toContain("thought");
     // Must not include $schema
-    expect("$schema" in tool.input_schema).toBe(false);
+    expect("$schema" in tool.inputSchema).toBe(false);
   });
 });
 

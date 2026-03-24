@@ -1,4 +1,4 @@
-import type Anthropic from "@anthropic-ai/sdk";
+import type { LLMMessage, LLMResponse } from "../providers/types.js";
 import type { AgentConfig } from "../config.js";
 import type { ToolCall, ToolResult } from "../tools/types.js";
 
@@ -12,7 +12,7 @@ import type { ToolCall, ToolResult } from "../tools/types.js";
 
 /** Context passed to beforeLLMCall — middleware can modify messages and system prompt. */
 export interface LLMCallContext {
-  messages: Anthropic.MessageParam[];
+  messages: LLMMessage[];
   systemPrompt: string;
   config: AgentConfig;
 }
@@ -20,7 +20,7 @@ export interface LLMCallContext {
 export interface Middleware {
   name: string;
   beforeLLMCall?(ctx: LLMCallContext): LLMCallContext;
-  afterLLMResponse?(response: Anthropic.Message): Anthropic.Message;
+  afterLLMResponse?(response: LLMResponse): LLMResponse;
   beforeToolCall?(call: ToolCall): ToolCall;
   afterToolResult?(call: ToolCall, result: ToolResult): ToolResult;
 }
@@ -38,8 +38,8 @@ export function applyBeforeLLMCall(middleware: Middleware[], ctx: LLMCallContext
 
 export function applyAfterLLMResponse(
   middleware: Middleware[],
-  response: Anthropic.Message,
-): Anthropic.Message {
+  response: LLMResponse,
+): LLMResponse {
   let result = response;
   for (const mw of middleware) {
     if (mw.afterLLMResponse) {

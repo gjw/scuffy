@@ -11,12 +11,13 @@ import type { AgentConfig } from "../config.js";
 
 function makeConfig(): AgentConfig {
   return {
+    provider: "anthropic",
     model: "test-model",
     maxTokens: 1024,
     maxIterations: 10,
     systemPrompt: "You are a test agent.",
     workingDir: "/tmp",
-    apiKey: "test-key",
+    anthropicApiKey: "test-key",
   };
 }
 
@@ -149,16 +150,11 @@ describe("LoggingMiddleware", () => {
     // Call beforeLLMCall first to set timing
     mw.beforeLLMCall?.({ messages: [], systemPrompt: "", config });
 
-    const mockResponse = {
-      id: "msg_1",
-      type: "message",
-      role: "assistant",
-      model: "test",
-      content: [{ type: "text", text: "Hello!", citations: null }],
-      stop_reason: "end_turn",
-      stop_sequence: null,
-      usage: { input_tokens: 10, output_tokens: 5 },
-    } as unknown as import("@anthropic-ai/sdk").default.Message;
+    const mockResponse: import("../providers/types.js").LLMResponse = {
+      content: [{ type: "text", text: "Hello!" }],
+      stopReason: "end_turn",
+      usage: { inputTokens: 10, outputTokens: 5 },
+    };
 
     mw.afterLLMResponse?.(mockResponse);
 
