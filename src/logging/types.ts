@@ -32,6 +32,8 @@ export type LLMResponseEvent = {
   toolCalls: ToolCallSummary[];
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   durationMs: number;
 };
 

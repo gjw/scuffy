@@ -90,7 +90,7 @@ export async function startRepl(
       });
       console.log(`\n${result.response}\n`);
       console.log(
-        `[tokens: ${String(result.tokensUsed.in)}/${String(result.tokensUsed.out)}, tools: ${String(result.toolCallCount)}, time: ${String(result.durationMs)}ms]\n`,
+        `[tokens: ${String(result.tokensUsed.in)}in/${String(result.tokensUsed.out)}out, cache: ${String(result.tokensUsed.cacheRead)}r/${String(result.tokensUsed.cacheWrite)}w, tools: ${String(result.toolCallCount)}, time: ${String(result.durationMs)}ms]\n`,
       );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

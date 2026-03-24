@@ -37,7 +37,7 @@ export async function runAgentLoop(
   const toolDefs = registry.toToolDefs();
   const logger = options.logger;
 
-  const tokensUsed = { in: 0, out: 0 };
+  const tokensUsed = { in: 0, out: 0, cacheRead: 0, cacheWrite: 0 };
   let toolCallCount = 0;
 
   // Build the initial user message with context injections
@@ -72,6 +72,8 @@ export async function runAgentLoop(
     // Accumulate token usage
     tokensUsed.in += response.usage.inputTokens;
     tokensUsed.out += response.usage.outputTokens;
+    tokensUsed.cacheRead += response.usage.cacheReadTokens;
+    tokensUsed.cacheWrite += response.usage.cacheWriteTokens;
 
     // Append assistant message to history
     session.messages.push({ role: "assistant", content: response.content });

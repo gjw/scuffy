@@ -37,7 +37,7 @@ function makeTextResponse(text: string): LLMResponse {
   return {
     content: [{ type: "text", text }],
     stopReason: "end_turn",
-    usage: { inputTokens: 10, outputTokens: 5 },
+    usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 },
   };
 }
 
@@ -52,7 +52,7 @@ function makeToolUseResponse(
       input: tc.input,
     })),
     stopReason: "tool_use",
-    usage: { inputTokens: 15, outputTokens: 10 },
+    usage: { inputTokens: 15, outputTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0 },
   };
 }
 

@@ -17,7 +17,7 @@ export interface Session {
 /** Result returned when the agent loop completes. */
 export interface AgentResult {
   response: string;
-  tokensUsed: { in: number; out: number };
+  tokensUsed: { in: number; out: number; cacheRead: number; cacheWrite: number };
   toolCallCount: number;
   durationMs: number;
   /** Set by exit-signaling tools (finishBead, escalate). Caller uses this for process.exit(). */

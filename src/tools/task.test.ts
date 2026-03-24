@@ -79,7 +79,7 @@ describe("task tool", () => {
     const mockLoop = vi.mocked(runAgentLoop);
     mockLoop.mockResolvedValueOnce({
       response: "The file contains 42 lines.",
-      tokensUsed: { in: 100, out: 50 },
+      tokensUsed: { in: 100, out: 50, cacheRead: 0, cacheWrite: 0 },
       toolCallCount: 1,
       durationMs: 500,
     });
@@ -132,7 +132,7 @@ describe("task tool", () => {
     const mockLoop = vi.mocked(runAgentLoop);
     mockLoop.mockResolvedValue({
       response: "done",
-      tokensUsed: { in: 10, out: 10 },
+      tokensUsed: { in: 10, out: 10, cacheRead: 0, cacheWrite: 0 },
       toolCallCount: 0,
       durationMs: 100,
     });
@@ -154,7 +154,7 @@ describe("task tool", () => {
     const mockLoop = vi.mocked(runAgentLoop);
     mockLoop.mockResolvedValue({
       response: "done",
-      tokensUsed: { in: 10, out: 10 },
+      tokensUsed: { in: 10, out: 10, cacheRead: 0, cacheWrite: 0 },
       toolCallCount: 0,
       durationMs: 100,
     });

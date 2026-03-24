@@ -73,6 +73,10 @@ function fromAnthropicResponse(response: Anthropic.Message): LLMResponse {
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
+      cacheReadTokens:
+        (response.usage as unknown as Record<string, number>)["cache_read_input_tokens"] ?? 0,
+      cacheWriteTokens:
+        (response.usage as unknown as Record<string, number>)["cache_creation_input_tokens"] ?? 0,
     },
   };
 }

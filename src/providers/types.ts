@@ -29,7 +29,12 @@ export interface LLMToolDef {
 export interface LLMResponse {
   content: ContentBlock[];
   stopReason: "end_turn" | "tool_use" | "max_tokens";
-  usage: { inputTokens: number; outputTokens: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+  };
 }
 
 export interface LLMProvider {

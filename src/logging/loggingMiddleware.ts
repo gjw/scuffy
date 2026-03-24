@@ -46,6 +46,8 @@ export function createLoggingMiddleware(logger: SessionLogger): Middleware {
         toolCalls,
         tokensIn: response.usage.inputTokens,
         tokensOut: response.usage.outputTokens,
+        cacheReadTokens: response.usage.cacheReadTokens,
+        cacheWriteTokens: response.usage.cacheWriteTokens,
         durationMs,
       });
 

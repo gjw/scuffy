@@ -56,7 +56,7 @@ export async function runHeadless(
 
   console.log(`\n${result.response}`);
   console.log(
-    `[tokens: ${String(result.tokensUsed.in)}/${String(result.tokensUsed.out)}, tools: ${String(result.toolCallCount)}, time: ${String(result.durationMs)}ms]`,
+    `[tokens: ${String(result.tokensUsed.in)}in/${String(result.tokensUsed.out)}out, cache: ${String(result.tokensUsed.cacheRead)}r/${String(result.tokensUsed.cacheWrite)}w, tools: ${String(result.toolCallCount)}, time: ${String(result.durationMs)}ms]`,
   );
 
   logger.log({

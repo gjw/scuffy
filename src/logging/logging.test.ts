@@ -153,7 +153,7 @@ describe("LoggingMiddleware", () => {
     const mockResponse: import("../providers/types.js").LLMResponse = {
       content: [{ type: "text", text: "Hello!" }],
       stopReason: "end_turn",
-      usage: { inputTokens: 10, outputTokens: 5 },
+      usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 3, cacheWriteTokens: 2 },
     };
 
     mw.afterLLMResponse?.(mockResponse);

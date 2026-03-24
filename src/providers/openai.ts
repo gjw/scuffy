@@ -104,7 +104,11 @@ function fromOpenAIResponse(choice: OpenAI.ChatCompletion.Choice): LLMResponse {
   if (choice.finish_reason === "tool_calls") stopReason = "tool_use";
   else if (choice.finish_reason === "length") stopReason = "max_tokens";
 
-  return { content, stopReason, usage: { inputTokens: 0, outputTokens: 0 } };
+  return {
+    content,
+    stopReason,
+    usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  };
 }
 
 export class OpenAIProvider implements LLMProvider {
@@ -141,6 +145,10 @@ export class OpenAIProvider implements LLMProvider {
     if (response.usage) {
       result.usage.inputTokens = response.usage.prompt_tokens;
       result.usage.outputTokens = response.usage.completion_tokens;
+      const details = response.usage.prompt_tokens_details as
+        | { cached_tokens?: number }
+        | undefined;
+      result.usage.cacheReadTokens = details?.cached_tokens ?? 0;
     }
     return result;
   }
