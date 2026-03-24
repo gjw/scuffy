@@ -114,6 +114,26 @@ export async function runAgentLoop(
         // Apply afterToolResult middleware
         result = applyAfterToolResult(middleware, call, result);
 
+        // Check for exit signal from tools like finishBead/escalate
+        if (result.metadata?.["exit"] === true) {
+          const exitCode =
+            typeof result.metadata["exitCode"] === "number" ? result.metadata["exitCode"] : 0;
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: result.content,
+            is_error: false,
+          });
+          session.messages.push({ role: "user", content: toolResults });
+          return {
+            response: result.content,
+            tokensUsed,
+            toolCallCount,
+            durationMs: Date.now() - startTime,
+            exitCode,
+          };
+        }
+
         toolResults.push({
           type: "tool_result",
           tool_use_id: call.id,

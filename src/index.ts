@@ -41,6 +41,8 @@ import { globTool } from "./tools/glob.js";
 import { grepTool } from "./tools/grep.js";
 import { bashTool } from "./tools/bash.js";
 import { createTaskTool } from "./tools/task.js";
+import { finishBeadTool } from "./tools/finishBead.js";
+import { escalateTool } from "./tools/escalate.js";
 import { startRepl } from "./cli/repl.js";
 
 async function main(): Promise<void> {
@@ -57,6 +59,8 @@ async function main(): Promise<void> {
   registry.register(grepTool);
   registry.register(bashTool);
   registry.register(createTaskTool(registry, config));
+  registry.register(finishBeadTool);
+  registry.register(escalateTool);
 
   // Middleware stack (empty until logging middleware is implemented)
   const middleware: Middleware[] = [];

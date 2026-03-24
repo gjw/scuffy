@@ -20,6 +20,8 @@ export interface AgentResult {
   tokensUsed: { in: number; out: number };
   toolCallCount: number;
   durationMs: number;
+  /** Set by exit-signaling tools (finishBead, escalate). Caller uses this for process.exit(). */
+  exitCode?: number | undefined;
 }
 
 /** External context injected into the first user message. */

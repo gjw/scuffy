@@ -66,6 +66,20 @@ export type SessionEndEvent = {
   durationMs: number;
 };
 
+export type BeadCompleteEvent = {
+  type: "bead_complete";
+  timestamp: string;
+  beadId: string;
+  summary: string;
+};
+
+export type EscalationEvent = {
+  type: "escalation";
+  timestamp: string;
+  reason: "stuck" | "need_replan" | "blocked";
+  message: string;
+};
+
 export type LogEvent =
   | SessionStartEvent
   | UserInstructionEvent
@@ -73,4 +87,6 @@ export type LogEvent =
   | LLMResponseEvent
   | ToolCallEvent
   | ToolResultEvent
-  | SessionEndEvent;
+  | SessionEndEvent
+  | BeadCompleteEvent
+  | EscalationEvent;
