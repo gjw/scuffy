@@ -72,7 +72,7 @@ wss.on("connection", (ws, req) => {
 
   if (!session) {
     // Spawn a new Scuffy child process
-    const proc = spawn("node", ["--import", "tsx", path.join(__dirname, "index.ts")], {
+    const proc = spawn(process.execPath, ["--import", "tsx", path.join(__dirname, "index.ts")], {
       cwd: process.cwd(),
       env: { ...process.env },
       stdio: ["pipe", "pipe", "pipe"],
