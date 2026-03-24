@@ -50,6 +50,7 @@ import { bashTool } from "./tools/bash.js";
 import { createTaskTool } from "./tools/task.js";
 import { finishBeadTool } from "./tools/finishBead.js";
 import { escalateTool } from "./tools/escalate.js";
+import { readReferenceTool } from "./tools/readReference.js";
 import { startRepl } from "./cli/repl.js";
 import { runHeadless } from "./cli/headless.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
@@ -124,6 +125,7 @@ async function main(): Promise<void> {
   registry.register(createTaskTool(registry, config, provider));
   registry.register(finishBeadTool);
   registry.register(escalateTool);
+  registry.register(readReferenceTool);
 
   // Middleware stack (empty — logging/time-awareness created per-session in REPL/headless)
   const middleware: Middleware[] = [];
