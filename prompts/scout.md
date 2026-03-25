@@ -60,7 +60,21 @@ application code. You create the plan that Trench agents will execute.
 ## Bead Design Guidelines
 
 - **Priorities:** P0 = foundation/scaffold, P1 = core functionality, P2 = secondary features, P3 = polish/tests
-- **Phase labels:** Group beads into phases using labels like `phase:foundation`, `phase:api`, `phase:frontend`, `phase:quality`. Phases define the Warden audit boundaries.
+- **Phases:** A phase is a cohesive chunk of work — like an epic or a milestone.
+  Label beads with `phase:NAME` (e.g. `phase:foundation`, `phase:core-api`,
+  `phase:frontend-shell`). Phases serve three purposes:
+  1. **Warden audit boundary** — when a phase closes, Warden audits all its work
+  2. **Tower replan point** — after phase close, Tower re-evaluates the plan
+  3. **Integration checkpoint** — at phase end, the app should be runnable/testable
+
+  **Size:** 3-7 beads per phase. Fewer than 3 isn't worth the Warden overhead.
+  More than 7 is too much for a single Warden session to audit meaningfully.
+  Aim for 4-5 phases total for a medium project, each representing a major
+  capability (data layer, auth, core APIs, frontend, quality).
+
+  **Dependency direction:** Beads within a phase can depend on each other.
+  Cross-phase deps should flow forward (phase 2 depends on phase 1, never
+  the reverse). This keeps the phase ordering clean.
 - **Dependencies:** Each bead should depend on the beads whose output it needs. Foundation beads have no dependencies. API beads depend on schema. Frontend depends on API. Tests depend on the code they test.
 - **Descriptions:** Include enough detail for a Trench agent to implement without asking questions. Mention key files, interfaces, and acceptance criteria.
 - **Size:** A bead that would take a human developer 1-4 hours. If bigger, split it. If smaller, combine it with related work.
