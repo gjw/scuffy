@@ -292,8 +292,8 @@ enforced at MVP.
 
 ## Trace Links (MVP)
 
-Session traces are JSONL files in `traces/`. Each line is a structured event:
-`session_start`, `llm_request`, `llm_response`, `tool_call`, `tool_result`,
+Session traces are JSONL files in [`traces/`](traces/). Each line is a structured
+event: `session_start`, `llm_request`, `llm_response`, `tool_call`, `tool_result`,
 `session_end`.
 
 - **Trace 1 (normal run):** [`traces/trace-1-normal-edit.jsonl`](traces/trace-1-normal-edit.jsonl)
@@ -307,6 +307,14 @@ Session traces are JSONL files in `traces/`. Each line is a structured event:
   string not found), then self-corrects by reading the file first and retrying
   with the correct string. Three tool calls: `editFile` (error) → `readFile` →
   `editFile` (success). Demonstrates error feedback and LLM self-correction.
+
+- **Trace 3 (multi-agent):** [`traces/trace-3-multi-agent.jsonl`](traces/trace-3-multi-agent.jsonl)
+  + [`traces/trace-3-sub-agent.jsonl`](traces/trace-3-sub-agent.jsonl)
+  — Supervisor agent spawns a subagent via the `task` tool to read and summarize
+  `src/config.ts`. Subagent runs in its own session (separate JSONL log), reads
+  the file, returns a structured summary. Parent receives the result as a
+  `tool_result` and synthesizes the final response. Demonstrates the supervisor
+  orchestration model and session isolation.
 
 ---
 
