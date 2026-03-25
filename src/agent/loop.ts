@@ -75,6 +75,20 @@ export async function runAgentLoop(
     tokensUsed.cacheRead += response.usage.cacheReadTokens;
     tokensUsed.cacheWrite += response.usage.cacheWriteTokens;
 
+    // Token budget guard: auto-escalate before hitting provider limit
+    if (tokensUsed.in >= config.tokenBudget) {
+      session.messages.push({ role: "assistant", content: response.content });
+      return {
+        response:
+          `Token budget exceeded (${String(tokensUsed.in)} input tokens vs ${String(config.tokenBudget)} budget). ` +
+          `Auto-escalating to prevent provider limit crash.`,
+        tokensUsed,
+        toolCallCount,
+        durationMs: Date.now() - startTime,
+        exitCode: 1,
+      };
+    }
+
     // Append assistant message to history
     session.messages.push({ role: "assistant", content: response.content });
 

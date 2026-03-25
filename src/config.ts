@@ -8,6 +8,7 @@ import { z } from "zod";
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const DEFAULT_MAX_TOKENS = 4096;
 const DEFAULT_MAX_ITERATIONS = 100;
+const DEFAULT_TOKEN_BUDGET = 800_000;
 
 const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
@@ -16,6 +17,7 @@ const EnvSchema = z.object({
   SCUFFY_MODEL: z.string().optional(),
   SCUFFY_MAX_TOKENS: z.coerce.number().positive().optional(),
   SCUFFY_MAX_ITERATIONS: z.coerce.number().positive().int().optional(),
+  SCUFFY_TOKEN_BUDGET: z.coerce.number().positive().int().optional(),
 });
 
 export interface AgentConfig {
@@ -23,6 +25,7 @@ export interface AgentConfig {
   model: string;
   maxTokens: number;
   maxIterations: number;
+  tokenBudget: number;
   systemPrompt: string;
   workingDir: string;
   anthropicApiKey?: string | undefined;
@@ -39,6 +42,7 @@ export function loadConfig(overrides?: Partial<AgentConfig>): AgentConfig {
     model: overrides?.model ?? env.SCUFFY_MODEL ?? DEFAULT_MODEL,
     maxTokens: overrides?.maxTokens ?? env.SCUFFY_MAX_TOKENS ?? DEFAULT_MAX_TOKENS,
     maxIterations: overrides?.maxIterations ?? env.SCUFFY_MAX_ITERATIONS ?? DEFAULT_MAX_ITERATIONS,
+    tokenBudget: overrides?.tokenBudget ?? env.SCUFFY_TOKEN_BUDGET ?? DEFAULT_TOKEN_BUDGET,
     systemPrompt: overrides?.systemPrompt ?? "",
     workingDir: overrides?.workingDir ?? process.cwd(),
   };

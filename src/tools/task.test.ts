@@ -51,6 +51,7 @@ function makeConfig(workingDir: string): AgentConfig {
     model: "claude-sonnet-4-6",
     maxTokens: 4096,
     maxIterations: 10,
+    tokenBudget: 800_000,
     systemPrompt: "",
     workingDir,
     anthropicApiKey: "test-key",

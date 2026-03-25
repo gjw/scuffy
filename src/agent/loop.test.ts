@@ -25,6 +25,7 @@ function makeConfig(overrides?: Partial<AgentConfig>): AgentConfig {
     model: "test-model",
     maxTokens: 1024,
     maxIterations: 10,
+    tokenBudget: 800_000,
     systemPrompt: "You are a test agent.",
     workingDir: "/tmp",
     anthropicApiKey: "test-key",
@@ -250,6 +251,29 @@ describe("runAgentLoop", () => {
       "mw1:afterLLM",
       "mw2:afterLLM",
     ]);
+  });
+
+  it("auto-escalates when token budget is exceeded", async () => {
+    const highTokenResponse: LLMResponse = {
+      content: [
+        { type: "tool_use" as const, id: "call_1", name: "think", input: { thought: "big" } },
+      ],
+      stopReason: "tool_use",
+      usage: { inputTokens: 500_000, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    };
+    const provider = makeMockProvider([highTokenResponse, highTokenResponse]);
+    const registry = new ToolRegistry();
+    registry.register(thinkTool);
+    const session = makeSession();
+    const config = makeConfig({ tokenBudget: 900_000 });
+
+    const result = await runAgentLoop("Do work", session, registry, [], config, { provider });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.response).toContain("Token budget exceeded");
+    expect(result.response).toContain("1000000 input tokens");
+    expect(result.response).toContain("900000 budget");
+    expect(result.tokensUsed.in).toBe(1_000_000);
   });
 
   it("includes context injections in user message", async () => {
