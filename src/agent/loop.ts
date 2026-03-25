@@ -80,14 +80,15 @@ export async function runAgentLoop(
     // Token budget guard: auto-escalate before hitting provider limit
     if (tokensUsed.in >= config.tokenBudget) {
       session.messages.push({ role: "assistant", content: response.content });
+      const claimedBead = session.claimedBeadId ?? "unknown";
       return {
         response:
-          `Token budget exceeded (${String(tokensUsed.in)} input tokens vs ${String(config.tokenBudget)} budget). ` +
+          `BUDGET_EXCEEDED bead=${claimedBead} tools=${String(toolCallCount)} tokens=${String(tokensUsed.in)}/${String(config.tokenBudget)}. ` +
           `Auto-escalating to prevent provider limit crash.`,
         tokensUsed,
         toolCallCount,
         durationMs: Date.now() - startTime,
-        exitCode: 1,
+        exitCode: 2, // Distinct from escalate (1) so summoner can detect budget-exceeded
       };
     }
 
@@ -100,6 +101,16 @@ export async function runAgentLoop(
         (block): block is TextBlock => block.type === "text",
       );
       const responseText = textBlocks.map((b) => b.text).join("\n");
+
+      // max_tokens with no usable content = truncated mid-response.
+      // Inject a recovery message and let the LLM continue.
+      if (response.stopReason === "max_tokens" && responseText.trim() === "") {
+        session.messages.push({
+          role: "user",
+          content: "Your previous response was truncated (hit output token limit). Continue where you left off. If you were in the middle of a tool call, retry it.",
+        });
+        continue;
+      }
 
       return {
         response: responseText,

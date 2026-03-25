@@ -272,10 +272,9 @@ describe("runAgentLoop", () => {
 
     const result = await runAgentLoop("Do work", session, registry, [], config, { provider });
 
-    expect(result.exitCode).toBe(1);
-    expect(result.response).toContain("Token budget exceeded");
-    expect(result.response).toContain("1000000 input tokens");
-    expect(result.response).toContain("900000 budget");
+    expect(result.exitCode).toBe(2);
+    expect(result.response).toContain("BUDGET_EXCEEDED");
+    expect(result.response).toContain("tokens=1000000/900000");
     expect(result.tokensUsed.in).toBe(1_000_000);
   });
 

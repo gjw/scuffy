@@ -6,7 +6,7 @@ import { z } from "zod";
  */
 
 const DEFAULT_MODEL = "claude-sonnet-4-6";
-const DEFAULT_MAX_TOKENS = 4096;
+const DEFAULT_MAX_TOKENS = 16_384;
 const DEFAULT_MAX_ITERATIONS = 100;
 const DEFAULT_TOKEN_BUDGET = 800_000;
 
