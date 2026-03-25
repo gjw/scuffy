@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
 import { z } from "zod";
+import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
 const parameters = z.object({
@@ -7,20 +7,8 @@ const parameters = z.object({
   message: z.string().describe("Human-readable explanation of the situation."),
 });
 
-/** Run a shell command and return { ok, output }. */
-function run(command: string, cwd: string): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolve) => {
-    execFile(
-      "/bin/sh",
-      ["-c", command],
-      { cwd, timeout: 30_000, maxBuffer: 10 * 1024 * 1024 },
-      (error, stdout, stderr) => {
-        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-        resolve({ ok: !error, output });
-      },
-    );
-  });
-}
+/** Run a shell command with DCG guard. */
+const run = guardedRun;
 
 export const escalateTool: Tool<typeof parameters> = {
   name: "escalate",

@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { z } from "zod";
+import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
-
-const CHECK_TIMEOUT_MS = 60_000;
 
 /** Glob patterns that identify test files. */
 const TEST_FILE_PATTERNS = [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"];
@@ -37,20 +35,8 @@ const parameters = z.object({
     ),
 });
 
-/** Run a shell command and return { ok, output }. */
-function run(command: string, cwd: string): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolve) => {
-    execFile(
-      "/bin/sh",
-      ["-c", command],
-      { cwd, timeout: CHECK_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 },
-      (error, stdout, stderr) => {
-        const output = [stdout, stderr].filter(Boolean).join("\n").trim();
-        resolve({ ok: !error, output });
-      },
-    );
-  });
-}
+/** Run a shell command with DCG guard. */
+const run = guardedRun;
 
 /** Check if a filename is a test file. */
 function isTestFile(filename: string): boolean {

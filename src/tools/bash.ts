@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { z } from "zod";
+import { checkDcg } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -21,6 +22,15 @@ export const bashTool: Tool<typeof parameters> = {
     "Execute a shell command and capture its output. " + "Returns exit code, stdout, and stderr.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
+    // DCG guard — block destructive commands before execution
+    const dcg = await checkDcg(params.command);
+    if (!dcg.allowed) {
+      return {
+        content: `Command blocked by DCG: ${dcg.reason ?? "destructive command"}`,
+        isError: true,
+      };
+    }
+
     const timeout = Math.min(params.timeout ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
 
     return new Promise((resolve) => {
