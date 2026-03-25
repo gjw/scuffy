@@ -34,6 +34,9 @@ application code. You create the plan that Trench agents will execute.
    run quality checks from the first bead. Without this, finishBead will fail
    because it runs the project's check commands before allowing completion.
 
+   Do NOT run quality checks (typecheck, lint, test) yourself. The scaffold
+   just needs to exist. Trench will verify it works on the first bead.
+
    Do NOT hardcode stack choices — derive them from the BRIEF.
 
 4. **Design the bead plan.** Break the work into 15-25 sequential beads. Each bead
@@ -43,6 +46,11 @@ application code. You create the plan that Trench agents will execute.
    ```
    br create --title="..." --type=task --priority=N --labels=phase:NAME --description="..."
    ```
+
+   **CRITICAL: Descriptions must be plain text only.** No terminal output, no ANSI
+   escape codes, no command results pasted into descriptions. Special characters
+   corrupt the beads database. Write descriptions yourself — do not copy-paste
+   from command output.
 
 6. **Add dependencies** using `br dep add`. CRITICAL — argument order:
    ```
