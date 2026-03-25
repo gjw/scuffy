@@ -15,11 +15,46 @@ set -euo pipefail
 
 WORKDIR="${1:-workspace/ship-rebuild}"
 SCUFFY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+MAIL_URL="${AGENT_MAIL_URL:-http://127.0.0.1:8765/mcp}"
+PROJECT_KEY="$(cd "$SCUFFY_ROOT" && pwd)"
 MAX_SLOTS=1  # Hook for future multi-scuffy
+
+# Check agent mail inbox for human overseer messages.
+# If found, display them and pause.
+check_inbox() {
+  local response
+  response=$(curl -sS -X POST "$MAIL_URL" \
+    -H "content-type: application/json" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch_inbox\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"agent_name\":\"scuffy\",\"unread_only\":true}}}" \
+    2>/dev/null) || return 0
+
+  # Extract text content from MCP result
+  local messages
+  messages=$(echo "$response" | jq -r '.result.content[]? | select(.type=="text") | .text' 2>/dev/null) || return 0
+
+  if [ -n "$messages" ] && [ "$messages" != "No messages found." ] && [ "$messages" != "null" ]; then
+    echo ""
+    echo "=== Human overseer message(s) ==="
+    echo "$messages"
+    echo "================================="
+    echo ""
+
+    # Mark messages as read
+    curl -sS -X POST "$MAIL_URL" \
+      -H "content-type: application/json" \
+      -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"mark_message_read\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"agent_name\":\"scuffy\"}}}" \
+      >/dev/null 2>&1 || true
+
+    read -r -p "Press Enter to continue (or Ctrl+C to stop)... "
+  fi
+}
 
 echo "Summoner started — workspace: $WORKDIR"
 
 while true; do
+  # Check for human overseer messages via agent mail
+  check_inbox
+
   # Brake check
   if [ -f "$WORKDIR/.pause" ]; then
     echo "Paused. Remove $WORKDIR/.pause to resume."
