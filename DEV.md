@@ -200,6 +200,116 @@ SCUFFY_MCP_SERVERS='[...,{"name":"cass","transport":"http","url":"http://127.0.0
 
 **Whitelisted tools:** `cm_context`, `cm_feedback`, `cm_outcome`
 
+## Workspace Setup
+
+A workspace is an isolated directory where Scuffy builds a project. Scuffy
+reads from it, writes to it, and commits within it. The Scuffy source repo
+and the workspace are separate git repositories.
+
+### What a workspace needs
+
+| File | Purpose | Created by |
+|---|---|---|
+| `BRIEF.md` | Project spec — what to build. **You write this.** | Human |
+| `.dcg.toml` | DCG overrides — allows `rm -rf` in workspace, keeps git safety | `reset-workspace.sh` |
+| `.git/` | Git repository for the workspace | `reset-workspace.sh` |
+| `.beads/` | Beads issue tracker for the workspace | `reset-workspace.sh` (via `br init`) |
+| `.gitignore` | Ignores `node_modules/`, `dist/`, `.scuffy/` | `reset-workspace.sh` |
+
+Everything else (package.json, tsconfig, CLAUDE.md, ARCHITECTURE.md, source
+code) is created by Scout and Trench during the build.
+
+### Creating a new workspace
+
+```bash
+# 1. Create the directory and write your BRIEF.md
+mkdir -p workspace/my-project
+# Write BRIEF.md with project requirements (stack, features, constraints)
+
+# 2. Run the reset script (inits git, beads, DCG config)
+./scripts/reset-workspace.sh workspace/my-project
+
+# 3. Start the build
+./scripts/summoner.sh workspace/my-project
+```
+
+The summoner detects an empty workspace (no beads), spawns Scout to read
+BRIEF.md, scaffold the project, and create beads. Then it loops Trench
+agents through the beads with Warden audits at phase boundaries.
+
+### Resetting an existing workspace
+
+```bash
+./scripts/reset-workspace.sh workspace/my-project
+```
+
+Preserves BRIEF.md, nukes everything else, re-inits git + beads + DCG.
+CASS memory (in `~/.cass-memory`) survives resets — that's intentional,
+so lessons from failed attempts carry forward.
+
+### The `.dcg.toml` override
+
+The workspace `.dcg.toml` allows `rm -rf` and `rm -r` within the workspace.
+Without it, DCG blocks legitimate cleanup operations (removing old scaffolds,
+clearing generated code). Git safety guards (`git reset --hard`,
+`git push --force`) remain active — those are dangerous even inside a workspace.
+
+```toml
+[overrides]
+allow = [
+    "rm -rf",
+    "rm -r ",
+]
+```
+
+### Sandbox isolation (optional, recommended for unattended runs)
+
+The sandbox profile restricts Scuffy to only write within the workspace
+directory. All other filesystem writes are blocked by the OS. This is
+the strongest containment layer — use it for long unattended runs.
+
+```bash
+sandbox-exec -f sandbox/scuffy-headless.sb -D SCUFFY_WORKSPACE=$(pwd)/workspace/my-project \
+  node dist/index.js --headless --workdir workspace/my-project --role trench
+```
+
+Or use the wrapper script:
+
+```bash
+./sandbox/run-headless.sh workspace/my-project --role trench
+```
+
+The sandbox and DCG serve different purposes:
+
+| Layer | What it blocks | Scope |
+|---|---|---|
+| **Sandbox** (sandbox-exec) | Filesystem writes outside workspace | OS-level, unforgeable |
+| **DCG** (.dcg.toml) | Destructive commands (`git reset --hard`) | Command-level, configurable |
+
+Both can run simultaneously. The sandbox prevents escaping the workspace;
+DCG prevents destructive operations within it.
+
+### External services (optional)
+
+These are not required but enhance the build:
+
+| Service | Start command | Purpose |
+|---|---|---|
+| Agent mail | `./scripts/start-agent-mail.sh` | Human-agent messaging, web dashboard at `:8765/mail` |
+| CASS memory | `./scripts/start-cass.sh` | Cross-attempt learning, playbook at `:8766` |
+
+Register the project with agent mail after starting:
+
+```bash
+./scripts/mail-register.sh
+```
+
+Connect Scuffy to both services via env var:
+
+```bash
+export SCUFFY_MCP_SERVERS='[{"name":"mail","transport":"http","url":"http://127.0.0.1:8765/mcp","tools":["send_message","fetch_inbox","register_agent","mark_message_read"]},{"name":"cass","transport":"http","url":"http://127.0.0.1:8766/mcp","tools":["cm_context","cm_feedback","cm_outcome"]}]'
+```
+
 ## Testing Notes
 
 **Headless mode and bead workflow:** Headless mode (`--headless --instruction "..."`)
