@@ -7,6 +7,7 @@
  * Usage:
  *   scuffy                                    # REPL mode
  *   scuffy --headless                         # Headless with default instruction
+ *   scuffy --headless --role trench           # Headless with role-based prompt
  *   scuffy --headless --instruction "..."     # Headless with custom instruction
  *   scuffy --headless --workdir path/to/dir   # Headless in a specific workspace
  */
@@ -61,6 +62,7 @@ import { runHeadless } from "./cli/headless.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { OpenAIProvider } from "./providers/openai.js";
 import type { LLMProvider } from "./providers/types.js";
+import { isValidRole, getRoleConfig, loadRolePrompt, type RoleName } from "./roles.js";
 
 const HEADLESS_SYSTEM_PROMPT = `You are Scuffy, an autonomous coding agent running in headless mode.
 You have one job per session: claim a bead, implement it, and exit.
@@ -91,10 +93,12 @@ function parseArgs(argv: string[]): {
   headless: boolean;
   workdir: string | undefined;
   instruction: string | undefined;
+  role: string | undefined;
 } {
   let headless = false;
   let workdir: string | undefined;
   let instruction: string | undefined;
+  let role: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -106,17 +110,37 @@ function parseArgs(argv: string[]): {
     } else if (arg === "--instruction" && i + 1 < argv.length) {
       i++;
       instruction = argv[i];
+    } else if (arg === "--role" && i + 1 < argv.length) {
+      i++;
+      role = argv[i];
     }
   }
 
-  return { headless, workdir, instruction };
+  return { headless, workdir, instruction, role };
 }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const overrides: Partial<AgentConfig> = {};
   if (args.workdir) overrides.workingDir = path.resolve(args.workdir);
-  if (args.headless) overrides.systemPrompt = HEADLESS_SYSTEM_PROMPT;
+
+  // Role-based configuration (--role flag overrides system prompt, agent name, model)
+  let resolvedRole: RoleName | undefined;
+  if (args.role) {
+    if (!isValidRole(args.role)) {
+      console.error(`Unknown role: ${args.role}. Valid roles: scout, trench, tower, warden-light, warden-dark`);
+      process.exit(1);
+    }
+    resolvedRole = args.role;
+    const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+    const roleConfig = getRoleConfig(resolvedRole);
+    overrides.systemPrompt = loadRolePrompt(resolvedRole, repoRoot);
+    overrides.agentName = roleConfig.agentName;
+    if (roleConfig.modelOverride) overrides.model = roleConfig.modelOverride;
+  } else if (args.headless) {
+    overrides.systemPrompt = HEADLESS_SYSTEM_PROMPT;
+  }
+
   const config = loadConfig(overrides);
 
   // Create LLM provider (loadConfig validates the required key is present)
@@ -173,8 +197,9 @@ async function main(): Promise<void> {
   const recordOutcome = createRecordOutcome(mcpServers);
 
   if (args.headless) {
+    const roleDefault = resolvedRole ? getRoleConfig(resolvedRole).defaultInstruction : undefined;
     const instruction =
-      args.instruction ?? process.env["SCUFFY_INSTRUCTION"] ?? DEFAULT_HEADLESS_INSTRUCTION;
+      args.instruction ?? process.env["SCUFFY_INSTRUCTION"] ?? roleDefault ?? DEFAULT_HEADLESS_INSTRUCTION;
     await runHeadless(registry, middleware, config, provider, instruction, notifyHuman, recordOutcome);
   } else {
     console.log(`Scuffy agent (${config.provider}/${config.model})`);
