@@ -21,7 +21,12 @@ export interface RoleConfig {
   modelOverride?: string | undefined;
 }
 
-const HEAVY_MODEL = "claude-sonnet-4-6";
+/**
+ * Heavy model for planning roles (Scout, Tower). Read from SCUFFY_HEAVY_MODEL
+ * env var. If not set, no override is applied — uses the default model from config.
+ * This avoids hardcoding a provider-specific model ID.
+ */
+const HEAVY_MODEL: string | undefined = process.env["SCUFFY_HEAVY_MODEL"] ?? undefined;
 
 const ROLES: Record<RoleName, RoleConfig> = {
   scout: {
