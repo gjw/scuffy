@@ -143,8 +143,8 @@ export class OpenAIProvider implements LLMProvider {
     const result = fromOpenAIResponse(choice);
     // OpenAI reports usage at the response level
     if (response.usage) {
-      result.usage.inputTokens = response.usage.prompt_tokens;
-      result.usage.outputTokens = response.usage.completion_tokens;
+      result.usage.inputTokens = response.usage.prompt_tokens ?? 0;
+      result.usage.outputTokens = response.usage.completion_tokens ?? 0;
       const details = response.usage.prompt_tokens_details as
         | { cached_tokens?: number }
         | undefined;
