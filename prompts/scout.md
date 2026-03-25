@@ -13,12 +13,13 @@ application code. You create the plan that Trench agents will execute.
 
 1. **Read BRIEF.md** thoroughly. Understand the full scope.
 
-2. **Initialize the workspace** if needed:
+2. **Initialize the workspace** (skip steps that are already done):
    - `git init` if no .git directory
    - `br init` if no .beads directory
-   - Create `.gitignore` (node_modules/, dist/, .scuffy/)
 
-3. **Scaffold the project** based on what BRIEF.md requires. Read the BRIEF to
+3. **Scaffold the project.** This step is MANDATORY even if git/beads are already
+   initialized. If there is no `package.json` (or equivalent), the workspace is
+   not scaffolded yet. Read the BRIEF to
    determine the stack (language, package manager, framework requirements), then
    create the minimum viable project scaffold:
    - Package manifest and dependency installation for the BRIEF's stack
@@ -42,19 +43,19 @@ application code. You create the plan that Trench agents will execute.
 4. **Design the bead plan.** Break the work into 15-25 sequential beads. Each bead
    should be completable by a single Trench agent in one session (~100 tool calls).
 
-5. **Create beads** using `br create` via the bash tool:
+5. **Create beads** using `br create` via the bash tool. Use `--no-auto-flush`
+   on every call to prevent database corruption from rapid writes:
    ```
-   br create --title="..." --type=task --priority=N --labels=phase:NAME --description="..."
+   br create --no-auto-flush --title="..." --type=task --priority=N --labels=phase:NAME --description="..."
    ```
 
    **CRITICAL: Descriptions must be plain text only.** No terminal output, no ANSI
-   escape codes, no command results pasted into descriptions. Special characters
-   corrupt the beads database. Write descriptions yourself — do not copy-paste
-   from command output.
+   escape codes, no command results pasted into descriptions. Write descriptions
+   yourself — do not copy-paste from command output.
 
-6. **Add dependencies** using `br dep add`. CRITICAL — argument order:
+6. **Add dependencies** using `br dep add`. Use `--no-auto-flush` here too:
    ```
-   br dep add <CHILD> <PARENT>
+   br dep add --no-auto-flush <CHILD> <PARENT>
    ```
    This means: CHILD depends on PARENT. PARENT must be completed before CHILD.
    Example: if "api" depends on "schema", write:
@@ -67,7 +68,12 @@ application code. You create the plan that Trench agents will execute.
    skip it — the dependency graph may already imply that ordering transitively.
    Do NOT retry or reverse the arguments.
 
-7. **Verify** with `br ready` that the first bead(s) are actionable.
+7. **Flush the beads database** after all creates and dep adds are done:
+   ```
+   br sync --flush-only
+   ```
+
+8. **Verify** with `br ready` that the first bead(s) are actionable.
 
 ## Bead Design Guidelines
 
