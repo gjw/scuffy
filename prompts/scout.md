@@ -26,10 +26,20 @@ application code. You create the plan that Trench agents will execute.
    br create --title="..." --type=task --priority=N --labels=phase:NAME --description="..."
    ```
 
-5. **Add dependencies** using `br dep add`:
+5. **Add dependencies** using `br dep add`. CRITICAL — argument order:
    ```
-   br dep add <bead-id> <depends-on-id>
+   br dep add <CHILD> <PARENT>
    ```
+   This means: CHILD depends on PARENT. PARENT must be completed before CHILD.
+   Example: if "api" depends on "schema", write:
+   ```
+   br dep add <api-id> <schema-id>
+   ```
+   NOT the reverse. Getting this backwards creates false cycles.
+
+   **Add dependencies one at a time.** If a command fails with CYCLE_DETECTED,
+   skip it — the dependency graph may already imply that ordering transitively.
+   Do NOT retry or reverse the arguments.
 
 6. **Verify** with `br ready` that the first bead(s) are actionable.
 

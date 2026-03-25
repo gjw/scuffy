@@ -116,10 +116,10 @@ br sync --flush-only  # Export DB to JSONL
 
 ### Key Concepts
 
-- **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
+- **Dependencies**: Issues can block other issues. NOTE: `br ready` may not filter by unresolved deps — use `bv --robot-next` for dependency-aware ordering.
 - **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers 0-4, not words)
 - **Types**: task, bug, feature, epic, chore, docs, question
-- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
+- **Blocking**: `br dep add <CHILD> <PARENT>` — CHILD depends on PARENT (PARENT blocks CHILD). **Order matters** — reversing arguments creates false cycles.
 
 ### Session Protocol
 
