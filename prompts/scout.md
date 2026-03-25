@@ -23,7 +23,11 @@ application code. You create the plan that Trench agents will execute.
    create the minimum viable project scaffold:
    - Package manifest and dependency installation for the BRIEF's stack
    - Build/type-check/lint/test configuration so quality checks pass
-   - A `CLAUDE.md` documenting build commands and conventions for Trench agents
+   - A `CLAUDE.md` documenting build commands, conventions, and directory layout
+   - An `ARCHITECTURE.md` with the high-level system design derived from the BRIEF:
+     directory structure, major components, data model overview, and key decisions.
+     This is the reference document Trench agents read before coding.
+   - A `.gitignore` appropriate for the stack
    - Commit this scaffold: `git add -A && git commit -m "Initial scaffold"`
 
    This is NOT application code — it's the bare minimum so Trench agents can

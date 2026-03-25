@@ -79,12 +79,31 @@ export function getRoleConfig(role: RoleName): RoleConfig {
   return ROLES[role];
 }
 
+/**
+ * Headless mode preamble — prepended to all role prompts when running
+ * in headless mode. Overrides interactive-session assumptions.
+ */
+const HEADLESS_PREAMBLE = `## Headless Mode
+
+You are running autonomously without a human present. Adjust your behavior:
+
+- **Do NOT print questions to stdout.** If you have a question, make a reasonable
+  decision, note your assumption, and continue. If truly blocked, call escalate.
+- **If the mcp_mail_send_message tool is available**, send non-blocking questions
+  to "human_overseer" via agent mail. Do not wait for a reply — continue working.
+- **Do NOT ask for confirmation.** Decide and act. Chair reviews asynchronously.
+- **Claim your bead** by calling claimBead at the start of your session.
+- **Do NOT claim beads via bash.** Use claimBead, finishBead, and escalate tools.
+
+`;
+
 /** Load the system prompt for a role from its prompt file. */
 export function loadRolePrompt(role: RoleName, repoRoot: string): string {
   const config = ROLES[role];
   const promptPath = path.join(repoRoot, config.promptFile);
   try {
-    return readFileSync(promptPath, "utf-8");
+    const rolePrompt = readFileSync(promptPath, "utf-8");
+    return HEADLESS_PREAMBLE + rolePrompt;
   } catch {
     throw new Error(`Role prompt not found: ${promptPath}`);
   }
