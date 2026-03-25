@@ -19,6 +19,7 @@ const EnvSchema = z.object({
   SCUFFY_MAX_ITERATIONS: z.coerce.number().positive().int().optional(),
   SCUFFY_TOKEN_BUDGET: z.coerce.number().positive().int().optional(),
   SCUFFY_MCP_SERVERS: z.string().optional(),
+  SCUFFY_AGENT_NAME: z.string().optional(),
 });
 
 export interface McpServerConfig {
@@ -51,6 +52,8 @@ export interface AgentConfig {
   maxIterations: number;
   tokenBudget: number;
   mcpServers: McpServerConfig[];
+  /** Agent mail identity name (e.g. "GreenCastle"). */
+  agentName: string;
   systemPrompt: string;
   workingDir: string;
   anthropicApiKey?: string | undefined;
@@ -69,6 +72,7 @@ export function loadConfig(overrides?: Partial<AgentConfig>): AgentConfig {
     maxIterations: overrides?.maxIterations ?? env.SCUFFY_MAX_ITERATIONS ?? DEFAULT_MAX_ITERATIONS,
     tokenBudget: overrides?.tokenBudget ?? env.SCUFFY_TOKEN_BUDGET ?? DEFAULT_TOKEN_BUDGET,
     mcpServers: overrides?.mcpServers ?? parseMcpServers(env.SCUFFY_MCP_SERVERS),
+    agentName: overrides?.agentName ?? env.SCUFFY_AGENT_NAME ?? "GreenCastle",
     systemPrompt: overrides?.systemPrompt ?? "",
     workingDir: overrides?.workingDir ?? process.cwd(),
   };

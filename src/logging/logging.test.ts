@@ -17,6 +17,7 @@ function makeConfig(): AgentConfig {
     maxIterations: 10,
     tokenBudget: 800_000,
     mcpServers: [],
+    agentName: "TestAgent",
     systemPrompt: "You are a test agent.",
     workingDir: "/tmp",
     anthropicApiKey: "test-key",

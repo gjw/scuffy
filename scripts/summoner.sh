@@ -35,7 +35,7 @@ check_inbox() {
   local response
   response=$(curl -sS --max-time 5 -X POST "$MAIL_URL" \
     -H "content-type: application/json" \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch_inbox\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"agent_name\":\"scuffy\"}}}" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"fetch_inbox\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"agent_name\":\"GreenCastle\"}}}" \
     2>/dev/null) || return 0
 
   # Check for MCP-level errors (tool call failures, not messages)
@@ -65,7 +65,7 @@ check_inbox() {
   # Mark messages as read
   curl -sS --max-time 5 -X POST "$MAIL_URL" \
     -H "content-type: application/json" \
-    -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"mark_message_read\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"agent_name\":\"scuffy\"}}}" \
+    -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"mark_message_read\",\"arguments\":{\"project_key\":\"$PROJECT_KEY\",\"agent_name\":\"GreenCastle\"}}}" \
     >/dev/null 2>&1 || true
 
   read -r -p "Press Enter to continue (or Ctrl+C to stop)... "

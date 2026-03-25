@@ -169,7 +169,7 @@ async function main(): Promise<void> {
   }
 
   // Create MCP callbacks (no-op when servers aren't connected)
-  const notifyHuman = createNotifyHuman(mcpServers, config.workingDir, "scuffy");
+  const notifyHuman = createNotifyHuman(mcpServers, config.workingDir, config.agentName);
   const recordOutcome = createRecordOutcome(mcpServers);
 
   if (args.headless) {
