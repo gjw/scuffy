@@ -18,7 +18,28 @@ const EnvSchema = z.object({
   SCUFFY_MAX_TOKENS: z.coerce.number().positive().optional(),
   SCUFFY_MAX_ITERATIONS: z.coerce.number().positive().int().optional(),
   SCUFFY_TOKEN_BUDGET: z.coerce.number().positive().int().optional(),
+  SCUFFY_MCP_SERVERS: z.string().optional(),
 });
+
+export interface McpServerConfig {
+  name: string;
+  transport: "stdio" | "http";
+  command?: string | undefined;
+  args?: string[] | undefined;
+  url?: string | undefined;
+  env?: Record<string, string> | undefined;
+}
+
+const McpServerConfigSchema = z.array(
+  z.object({
+    name: z.string(),
+    transport: z.enum(["stdio", "http"]),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    url: z.string().optional(),
+    env: z.record(z.string(), z.string()).optional(),
+  }),
+);
 
 export interface AgentConfig {
   provider: "anthropic" | "openai";
@@ -26,6 +47,7 @@ export interface AgentConfig {
   maxTokens: number;
   maxIterations: number;
   tokenBudget: number;
+  mcpServers: McpServerConfig[];
   systemPrompt: string;
   workingDir: string;
   anthropicApiKey?: string | undefined;
@@ -43,6 +65,7 @@ export function loadConfig(overrides?: Partial<AgentConfig>): AgentConfig {
     maxTokens: overrides?.maxTokens ?? env.SCUFFY_MAX_TOKENS ?? DEFAULT_MAX_TOKENS,
     maxIterations: overrides?.maxIterations ?? env.SCUFFY_MAX_ITERATIONS ?? DEFAULT_MAX_ITERATIONS,
     tokenBudget: overrides?.tokenBudget ?? env.SCUFFY_TOKEN_BUDGET ?? DEFAULT_TOKEN_BUDGET,
+    mcpServers: overrides?.mcpServers ?? parseMcpServers(env.SCUFFY_MCP_SERVERS),
     systemPrompt: overrides?.systemPrompt ?? "",
     workingDir: overrides?.workingDir ?? process.cwd(),
   };
@@ -61,4 +84,16 @@ export function loadConfig(overrides?: Partial<AgentConfig>): AgentConfig {
   }
 
   return config;
+}
+
+/** Parse MCP server configs from JSON env var. Returns empty array on missing/invalid. */
+function parseMcpServers(raw: string | undefined): McpServerConfig[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return McpServerConfigSchema.parse(parsed);
+  } catch {
+    console.error("Warning: SCUFFY_MCP_SERVERS is not valid JSON. Ignoring.");
+    return [];
+  }
 }

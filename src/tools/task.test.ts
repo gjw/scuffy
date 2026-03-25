@@ -52,6 +52,7 @@ function makeConfig(workingDir: string): AgentConfig {
     maxTokens: 4096,
     maxIterations: 10,
     tokenBudget: 800_000,
+    mcpServers: [],
     systemPrompt: "",
     workingDir,
     anthropicApiKey: "test-key",

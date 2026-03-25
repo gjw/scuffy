@@ -51,6 +51,8 @@ import { createTaskTool } from "./tools/task.js";
 import { finishBeadTool } from "./tools/finishBead.js";
 import { escalateTool } from "./tools/escalate.js";
 import { readReferenceTool } from "./tools/readReference.js";
+import { connectMcpServers, disconnectAll } from "./mcp/client.js";
+import { bridgeMcpTools } from "./mcp/bridge.js";
 import { startRepl } from "./cli/repl.js";
 import { runHeadless } from "./cli/headless.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
@@ -138,11 +140,27 @@ async function main(): Promise<void> {
   registry.register(escalateTool);
   registry.register(readReferenceTool);
 
+  // Connect to configured MCP servers and register their tools
+  const mcpServers = await connectMcpServers(config.mcpServers);
+  for (const server of mcpServers) {
+    const tools = await bridgeMcpTools(server.name, server.client);
+    for (const tool of tools) {
+      registry.register(tool);
+    }
+  }
+
   // Middleware stack (empty — logging/time-awareness created per-session in REPL/headless)
   const middleware: Middleware[] = [];
 
   // Ensure sessions directory exists
   await mkdir(path.join(config.workingDir, ".scuffy", "sessions"), { recursive: true });
+
+  // Clean up MCP connections on exit
+  if (mcpServers.length > 0) {
+    process.on("exit", () => {
+      void disconnectAll(mcpServers);
+    });
+  }
 
   if (args.headless) {
     const instruction =

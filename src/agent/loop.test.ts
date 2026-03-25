@@ -26,6 +26,7 @@ function makeConfig(overrides?: Partial<AgentConfig>): AgentConfig {
     maxTokens: 1024,
     maxIterations: 10,
     tokenBudget: 800_000,
+    mcpServers: [],
     systemPrompt: "You are a test agent.",
     workingDir: "/tmp",
     anthropicApiKey: "test-key",

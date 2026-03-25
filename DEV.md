@@ -87,6 +87,35 @@ Model can be overridden per invocation via `loadConfig({ model: "gpt-5.4-pro" })
 The summoner script and headless callers use this to assign heavier models to
 planning tasks.
 
+## MCP Agent Mail Integration
+
+Scuffy connects to [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail)
+for inter-agent and agent-to-human messaging. The server exposes 40+ MCP tools across
+9 clusters. We whitelist only the tools we need to keep context lean.
+
+**Currently whitelisted:**
+
+- `send_message` — flag Chair, message Tower/Warden
+- `fetch_inbox` — check for human instructions at session start
+- `register_agent` — one-time identity setup
+- `mark_message_read` — housekeeping
+
+**Available but not yet used — add when needed:**
+
+| Cluster | Tools | Use case |
+|---|---|---|
+| **file_reservations** | `file_reservation_paths`, `release_file_reservations`, `renew_file_reservations` | Multi-Scuffy: prevent two agents editing the same files |
+| **build_slots** | `acquire_build_slot`, `renew_build_slot`, `release_build_slot` | Signal long-running ops ("I'm running the test suite") |
+| **search** | `search_messages`, `summarize_thread`, `summarize_recent` | Agent self-serve: "what did Tower say about auth?" |
+| **contact** | `request_contact`, `respond_contact`, `list_contacts` | Cross-project agent linking |
+| **workflow_macros** | `macro_start_session`, `macro_file_reservation_cycle` | Bundled multi-step flows for smaller models |
+| **product_bus** | `ensure_product`, `products_link`, `fetch_inbox_product` | Cross-repo coordination (Ship API + Ship frontend as one product) |
+| **identity** | `whois`, `list_window_identities` | Agent discovery ("who else is working?") |
+
+**Web dashboard:** `http://localhost:8765/mail` — browse messages, search, compose
+overseer messages to agents. The `/mail/{project}/overseer/compose` endpoint lets
+Chair send high-priority instructions that override agent priorities.
+
 ## Testing Notes
 
 **Headless mode and bead workflow:** Headless mode (`--headless --instruction "..."`)
