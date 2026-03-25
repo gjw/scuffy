@@ -8,7 +8,7 @@
 |---|---|---|
 | Runtime | Node.js (≥24) | Active LTS, native fetch, stable test runner APIs |
 | Language | TypeScript (strict mode) | Type safety, Zod integration, assignment requirement |
-| LLM SDK | `@anthropic-ai/sdk` | PRD requires Anthropic SDK. Direct API access, no wrapper overhead |
+| LLM SDK | `@anthropic-ai/sdk` + `openai` | Dual-provider: Anthropic and OpenAI behind a shared interface |
 | Validation | Zod | Tool parameter schemas, API response validation, type inference |
 | Logging | JSONL (custom) | Append-only session logs, human-readable, `jq`-friendly |
 | Testing | Vitest | Fast, TypeScript-native, compatible with strict tsconfig |
@@ -38,13 +38,22 @@ scuffy/                              # Repo root (/Users/gjw/dev/scuffy)
 │   │   ├── grep.ts                  # Content search
 │   │   ├── listDir.ts               # Directory listing
 │   │   ├── task.ts                  # Subagent spawning
-│   │   └── think.ts                 # No-op reasoning scratchpad
+│   │   ├── think.ts                 # No-op reasoning scratchpad
+│   │   ├── finishBead.ts            # Quality checks → commit → close bead → exit(0)
+│   │   ├── escalate.ts              # Commit WIP → log escalation → exit(1)
+│   │   └── readReference.ts         # Read-only access to FleetGraph source
 │   ├── logging/
 │   │   ├── session.ts               # JSONL session logger
 │   │   └── types.ts                 # Log event types
 │   ├── cli/
-│   │   └── repl.ts                  # Persistent REPL loop (readline)
+│   │   ├── repl.ts                  # Persistent REPL loop (readline)
+│   │   └── headless.ts              # Single-instruction mode (bead automation)
+│   ├── providers/
+│   │   ├── types.ts                 # LLMProvider interface
+│   │   ├── anthropic.ts             # Anthropic provider (cache tokens supported)
+│   │   └── openai.ts                # OpenAI provider (auto-caching on gpt-4o+)
 │   ├── config.ts                    # Model selection, env vars, defaults
+│   ├── serve.ts                     # Web server (Express + WebSocket)
 │   └── index.ts                     # Entry point
 │
 ├── prompts/                         # Agent role prompts (Tower, Trench)
@@ -137,6 +146,64 @@ so it's accessible via GitHub. The `workspace/` gitignore is lifted for the spec
 rebuild we're submitting. Session logs from the rebuild run are included as evidence
 for the comparative analysis.
 
+## LLM Provider Abstraction
+
+Scuffy supports Anthropic and OpenAI behind a shared `LLMProvider` interface.
+The provider is selected by `SCUFFY_PROVIDER` env var (default: `anthropic`).
+The model ID is a freeform string passed directly to the provider SDK — there
+is no enum. Set `SCUFFY_MODEL` to any model the provider accepts.
+
+| Env var | Purpose | Default |
+|---|---|---|
+| `SCUFFY_PROVIDER` | `"anthropic"` or `"openai"` | `"anthropic"` |
+| `SCUFFY_MODEL` | Model ID string | `"claude-sonnet-4-6"` |
+| `ANTHROPIC_API_KEY` | Required when provider is anthropic | — |
+| `OPENAI_API_KEY` | Required when provider is openai | — |
+| `OPENAI_PROJECT` | Optional OpenAI project scoping (read by SDK automatically) | — |
+| `SCUFFY_MAX_TOKENS` | Output token limit per LLM call | `4096` |
+| `SCUFFY_MAX_ITERATIONS` | Safety cap on tool loops | `100` |
+
+All config values can be overridden programmatically via `loadConfig(overrides)`.
+Headless callers and the summoner script use this to swap models per invocation
+(e.g., `gpt-5.4-pro` for planning tasks, `gpt-5.4` for standard work).
+
+### Provider differences
+
+| Behavior | Anthropic | OpenAI |
+|---|---|---|
+| Cache token tracking | Full: `cacheReadTokens` + `cacheWriteTokens` | Read only: `cached_tokens` via `prompt_tokens_details`. Write is always 0. |
+| Automatic caching | Via cache control blocks | Automatic on gpt-4o+ models (≥1024 prompt tokens) |
+| Tool format | Native `tool_use` content blocks | Translated to/from `function` tool calls |
+| Stop reason mapping | Direct (`end_turn`, `tool_use`, `max_tokens`) | Mapped from `finish_reason` (`stop`→`end_turn`, `tool_calls`→`tool_use`, `length`→`max_tokens`) |
+
+## CLI Modes
+
+Scuffy has three entry points. They share the same agent loop and tool set.
+
+### REPL (`npm run dev`)
+
+Interactive persistent session. User sends instructions, agent works, session
+persists across instructions. Used for development and manual testing.
+
+### Headless (`node dist/index.js --headless --instruction "..."`)
+
+Single-instruction, single agent loop, then exit. Exit code comes from
+exit-signaling tools: `finishBead` → 0, `escalate` → 1.
+
+**Current limitation:** Headless mode uses the same system prompt as REPL,
+which includes bead workflow instructions. The agent will prioritize claiming
+and working on beads over following the literal `--instruction` text. This is
+correct for bead automation (the summoner script) but means headless mode
+cannot currently be used for ad-hoc one-shot tasks. If ad-hoc headless usage
+is needed later, the system prompt will need a mode flag to disable bead
+workflow behavior.
+
+### Web server (`npm run serve`)
+
+Express + WebSocket on port 3000 (or `SCUFFY_PORT`). Cookie-based sessions,
+each spawning a child REPL process. Auto-reaps dead sessions every minute.
+See DEV.md for deployment details.
+
 ## Data Model
 
 ### Messages
@@ -222,11 +289,14 @@ async function runAgentLoop(
 ): Promise<AgentResult>;
 
 interface AgentConfig {
-  model: string;           // e.g. "claude-opus-4-6"
+  provider: "anthropic" | "openai";
+  model: string;           // e.g. "claude-sonnet-4-6", "gpt-5.4"
   maxTokens: number;       // output token limit per LLM call
   maxIterations: number;   // safety cap on tool-call loops
   systemPrompt: string;
   workingDir: string;
+  anthropicApiKey?: string;
+  openaiApiKey?: string;
 }
 
 interface AgentResult {
@@ -277,8 +347,8 @@ registry.register(readFileTool);
 registry.register(editFileTool);
 // ...
 
-// Converts to Anthropic API tool format
-const anthropicTools = registry.toAnthropicTools();
+// Converts Zod schemas to provider-agnostic tool definitions
+const toolDefs = registry.toToolDefs();
 ```
 
 ### How to Add a Tool
@@ -416,3 +486,8 @@ These must hold at all times. If any invariant is violated, it's a bug.
 
 8. **Model is configurable.** The model ID must come from config/env, never hardcoded.
    Switching models must not require code changes.
+
+9. **Exit signaling is tool-driven.** The agent loop does not decide when to stop —
+   tools signal exit via `metadata: { exit: true, exitCode: 0|1 }`. `finishBead`
+   signals success (0), `escalate` signals failure/pause (1). In headless mode,
+   this exit code becomes the process exit code.
