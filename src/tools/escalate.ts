@@ -29,6 +29,13 @@ export const escalateTool: Tool<typeof parameters> = {
     "and signals session exit with error code. Summoner pauses for human review.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
+    // Release claimed bead so the next session doesn't re-grab it
+    const claimedId = ctx.getClaimedBeadId();
+    if (claimedId !== null) {
+      await run(`br update ${claimedId} --status=open`, ctx.workingDir);
+      ctx.setClaimedBeadId(null);
+    }
+
     // Commit WIP if there are uncommitted changes
     const status = await run("git status --porcelain", ctx.workingDir);
     if (status.output.length > 0) {

@@ -39,6 +39,8 @@ function makeCtx(): ToolContext {
     sessionId: "parent-session",
     workingDir: "/tmp",
     fileReadTimestamps: new Map(),
+    getClaimedBeadId: () => null,
+    setClaimedBeadId: () => {},
     log: () => {
       /* noop */
     },

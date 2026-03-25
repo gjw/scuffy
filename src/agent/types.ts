@@ -11,6 +11,8 @@ export interface Session {
   messages: LLMMessage[];
   /** Tracks which files have been read and when. Enforces read-before-edit. */
   fileReadTimestamps: Map<string, number>;
+  /** Bead claimed by claimBead tool in this session. Cleared on escalate. */
+  claimedBeadId: string | null;
   logFile: string;
 }
 

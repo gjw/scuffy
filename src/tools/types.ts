@@ -15,6 +15,10 @@ export interface ToolContext {
   workingDir: string;
   /** Tracks which files have been read and when. Enforces read-before-edit. */
   fileReadTimestamps: Map<string, number>;
+  /** Get the bead claimed in this session (set by claimBead tool). */
+  getClaimedBeadId: () => string | null;
+  /** Set the claimed bead ID (used by claimBead and escalate). */
+  setClaimedBeadId: (id: string | null) => void;
   log: (event: LogEvent) => void;
 }
 

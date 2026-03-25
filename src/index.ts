@@ -50,6 +50,7 @@ import { bashTool } from "./tools/bash.js";
 import { createTaskTool } from "./tools/task.js";
 import { finishBeadTool } from "./tools/finishBead.js";
 import { escalateTool } from "./tools/escalate.js";
+import { claimBeadTool } from "./tools/claimBead.js";
 import { readReferenceTool } from "./tools/readReference.js";
 import { startRepl } from "./cli/repl.js";
 import { runHeadless } from "./cli/headless.js";
@@ -58,26 +59,21 @@ import { OpenAIProvider } from "./providers/openai.js";
 import type { LLMProvider } from "./providers/types.js";
 
 const HEADLESS_SYSTEM_PROMPT = `You are Scuffy, an autonomous coding agent running in headless mode.
-You have one job per session: find the next bead, implement it, and exit.
+You have one job per session: claim a bead, implement it, and exit.
 
-## Finding work
+## Workflow
 
-1. Run \`bv --robot-next\` to get the top pick.
-2. Check its status with \`br show <id>\`.
-3. If the bead is already in_progress (claimed by a previous session that did not finish),
-   skip it — run \`br ready --json\` and pick the next bead that is NOT in_progress.
-4. If no ready beads are available (all are in_progress or blocked), call escalate
-   with reason "no_actionable_beads".
+1. Call the claimBead tool to get your assignment. It finds, filters, and claims the next actionable bead.
+2. Read the bead description it returns for requirements and acceptance criteria.
+3. Implement the task.
+4. When done, call the finishBead tool. If stuck or blocked, call the escalate tool.
 
-## Working
-
-Use \`br update <id> --status=in_progress\` to claim your chosen bead.
-Read the bead description with \`br show <id>\` for requirements and acceptance criteria.
-When done, call the finishBead tool. If stuck or blocked, call the escalate tool.
+Do NOT claim beads via bash. Do NOT run br update, br close, or bv commands directly.
+The claimBead, finishBead, and escalate tools handle all bead lifecycle operations.
 Do not ask questions — decide and act.`;
 
 const DEFAULT_HEADLESS_INSTRUCTION =
-  "Find the next ready bead using `bv --robot-next`, claim it, implement it, " +
+  "Call claimBead to get your assignment, implement it, " +
   "then call finishBead when done. If stuck or blocked, call escalate.";
 
 /** Parse CLI args. Returns flag values. */
@@ -134,6 +130,7 @@ async function main(): Promise<void> {
   registry.register(grepTool);
   registry.register(bashTool);
   registry.register(createTaskTool(registry, config, provider));
+  registry.register(claimBeadTool);
   registry.register(finishBeadTool);
   registry.register(escalateTool);
   registry.register(readReferenceTool);
