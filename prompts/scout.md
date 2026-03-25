@@ -18,15 +18,19 @@ application code. You create the plan that Trench agents will execute.
    - `br init` if no .beads directory
    - Create `.gitignore` (node_modules/, dist/, .scuffy/)
 
-3. **Scaffold the project** so Trench agents can start working immediately:
-   - `npm init -y` and install core dependencies (typescript, etc.)
-   - Create `tsconfig.json` with strict mode
-   - Create a basic `CLAUDE.md` with build/test commands and conventions
+3. **Scaffold the project** based on what BRIEF.md requires. Read the BRIEF to
+   determine the stack (language, package manager, framework requirements), then
+   create the minimum viable project scaffold:
+   - Package manifest and dependency installation for the BRIEF's stack
+   - Build/type-check/lint/test configuration so quality checks pass
+   - A `CLAUDE.md` documenting build commands and conventions for Trench agents
    - Commit this scaffold: `git add -A && git commit -m "Initial scaffold"`
 
-   This is NOT application code — it's the bare minimum so `npm run typecheck`
-   and `npm run test` work from the first bead. Without this, Trench agents
-   will fail immediately because finishBead runs quality checks.
+   This is NOT application code — it's the bare minimum so Trench agents can
+   run quality checks from the first bead. Without this, finishBead will fail
+   because it runs the project's check commands before allowing completion.
+
+   Do NOT hardcode stack choices — derive them from the BRIEF.
 
 4. **Design the bead plan.** Break the work into 15-25 sequential beads. Each bead
    should be completable by a single Trench agent in one session (~100 tool calls).
