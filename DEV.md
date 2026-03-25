@@ -93,6 +93,26 @@ Scuffy connects to [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_age
 for inter-agent and agent-to-human messaging. The server exposes 40+ MCP tools across
 9 clusters. We whitelist only the tools we need to keep context lean.
 
+**Starting the server:**
+
+```bash
+# Requires uv (https://docs.astral.sh/uv/)
+./scripts/start-agent-mail.sh
+
+# Or manually:
+uvx --python 3.12 --from mcp_agent_mail python -m mcp_agent_mail.http --host 127.0.0.1 --port 8765
+```
+
+**Connecting Scuffy:**
+
+```bash
+SCUFFY_MCP_SERVERS='[{"name":"mail","transport":"http","url":"http://127.0.0.1:8765/mcp","tools":["send_message","fetch_inbox","register_agent","mark_message_read"]}]'
+```
+
+**Registering Scuffy as an agent:** Call the `register_agent` MCP tool with this
+repo's absolute path as `project_key` and `"scuffy"` as agent name. This is a
+one-time setup — the identity persists in the mail server's storage.
+
 **Currently whitelisted:**
 
 - `send_message` — flag Chair, message Tower/Warden
