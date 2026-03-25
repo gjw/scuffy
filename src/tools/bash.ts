@@ -23,7 +23,7 @@ export const bashTool: Tool<typeof parameters> = {
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     // DCG guard — block destructive commands before execution
-    const dcg = await checkDcg(params.command);
+    const dcg = await checkDcg(params.command, ctx.workingDir);
     if (!dcg.allowed) {
       return {
         content: `Command blocked by DCG: ${dcg.reason ?? "destructive command"}`,

@@ -12,12 +12,12 @@ interface DcgResult {
  * Check a command against DCG (destructive_command_guard).
  * Fails open — if dcg is not installed or errors, the command is allowed.
  */
-export function checkDcg(command: string): Promise<DcgResult> {
+export function checkDcg(command: string, cwd?: string): Promise<DcgResult> {
   return new Promise((resolve) => {
     execFile(
       "dcg",
       ["test", "--format", "json", command],
-      { timeout: DCG_TIMEOUT_MS },
+      { timeout: DCG_TIMEOUT_MS, cwd },
       (error, stdout) => {
         if (!error) {
           // Exit 0 = allowed
@@ -63,7 +63,7 @@ export async function guardedRun(
   cwd: string,
   timeout?: number,
 ): Promise<{ ok: boolean; output: string }> {
-  const dcg = await checkDcg(command);
+  const dcg = await checkDcg(command, cwd);
   if (!dcg.allowed) {
     return { ok: false, output: `DCG blocked: ${dcg.reason ?? "destructive command"}` };
   }
