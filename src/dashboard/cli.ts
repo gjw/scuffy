@@ -62,12 +62,19 @@ try {
 console.log("Generating dependency graph...");
 let mermaidGraph = "";
 try {
-  mermaidGraph = execFileSync("bv", ["--robot-graph", "--graph-format=mermaid"], {
+  const bvOutput = execFileSync("bv", ["--robot-graph", "--graph-format=mermaid"], {
     cwd: workspaceDir,
     timeout: 10_000,
     encoding: "utf-8",
     stdio: ["pipe", "pipe", "pipe"],
   }).trim();
+  // bv outputs JSON with graph in a "graph" field — extract it
+  try {
+    const parsed = JSON.parse(bvOutput) as { graph?: string };
+    mermaidGraph = parsed.graph ?? bvOutput;
+  } catch {
+    mermaidGraph = bvOutput;
+  }
 } catch {
   console.log("  Could not generate graph (bv not available)");
 }

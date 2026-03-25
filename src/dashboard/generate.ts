@@ -375,7 +375,7 @@ ${renderBeadSummary(data.beads)}
 <h2>Dependency Graph</h2>
 <div class="graph-container">
   <pre class="mermaid">
-${escapeHtml(data.mermaidGraph || "graph LR\n  empty[No graph data]")}
+${data.mermaidGraph || "graph LR\n  empty[No graph data]"}
   </pre>
 </div>
 
