@@ -22,7 +22,19 @@ function run(command: string, cwd: string): Promise<{ ok: boolean; output: strin
   });
 }
 
-/** Zod schema for a single bead from `br ready --json`. */
+/**
+ * Schema for bv --robot-next JSON output.
+ * bv returns a single object with the top pick, not an array.
+ */
+const BvNextSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  score: z.number().optional(),
+  reasons: z.array(z.string()).optional(),
+  claim_command: z.string().optional(),
+});
+
+/** Fallback: schema for beads from br ready --json (array). */
 const BeadSchema = z.object({
   id: z.string(),
   title: z.string(),
@@ -33,12 +45,11 @@ const BeadSchema = z.object({
   labels: z.array(z.string()).nullable().optional(),
 });
 
-type Bead = z.infer<typeof BeadSchema>;
-
 export const claimBeadTool: Tool<typeof parameters> = {
   name: "claimBead",
   description:
-    "Find and claim the next actionable bead. Filters out human-only and stale in_progress beads. " +
+    "Find and claim the next actionable bead using dependency-aware triage. " +
+    "Filters out human-only and stale in_progress beads. " +
     "Returns full bead details. Call this once at session start — do not claim beads via bash.",
   parameters,
   async execute(_params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
@@ -57,71 +68,90 @@ export const claimBeadTool: Tool<typeof parameters> = {
       await run("br init", ctx.workingDir);
     }
 
-    // Get ready beads
-    const ready = await run("br ready --json", ctx.workingDir);
-    if (!ready.ok) {
-      return {
-        content: `Failed to get ready beads: ${ready.output}\n\nHint: beads may not be initialized. Run 'br init' in the workspace, then create beads with 'br create'.`,
-        isError: true,
-      };
+    // Try bv --robot-next first (dependency-aware, graph-ranked)
+    let pickId: string | null = null;
+    let pickTitle: string | null = null;
+
+    const bvResult = await run("bv --robot-next 2>/dev/null", ctx.workingDir);
+    if (bvResult.ok && bvResult.output.trim().length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(bvResult.output);
+        const pick = BvNextSchema.parse(parsed);
+        pickId = pick.id;
+        pickTitle = pick.title;
+      } catch {
+        // bv parse failed — fall through to br ready
+      }
     }
 
-    // Parse the output — br ready --json returns an array
-    let beads: Bead[];
-    try {
-      const parsed: unknown = JSON.parse(ready.output);
-      const arr = z.array(BeadSchema).parse(parsed);
-      beads = arr;
-    } catch {
-      return {
-        content: `Failed to parse bead list. Output was: ${ready.output.slice(0, 500)}\n\nThis may mean beads are not initialized. Use 'br init' then 'br create' to set up work items.`,
-        isError: true,
-      };
+    // Fallback to br ready --json if bv didn't work
+    if (pickId === null) {
+      const ready = await run("br ready --json", ctx.workingDir);
+      if (!ready.ok) {
+        return {
+          content: `No beads available. Both bv --robot-next and br ready failed.\n\nbv: ${bvResult.output.slice(0, 300)}\nbr: ${ready.output.slice(0, 300)}`,
+          isError: true,
+        };
+      }
+
+      try {
+        const parsed: unknown = JSON.parse(ready.output);
+        const beads = z.array(BeadSchema).parse(parsed);
+
+        // Filter: exclude human-only and stale in_progress
+        const eligible = beads.filter((b) => {
+          if (b.status === "in_progress") return false;
+          const labels = b.labels ?? [];
+          if (labels.some((l) => EXCLUDED_LABELS.includes(l))) return false;
+          return true;
+        });
+
+        if (eligible.length === 0) {
+          return {
+            content: "No actionable beads available. All beads are either in_progress or labeled human-only.",
+            isError: true,
+          };
+        }
+
+        const first = eligible[0];
+        if (first) {
+          pickId = first.id;
+          pickTitle = first.title;
+        }
+      } catch {
+        return {
+          content: `Failed to parse bead list. Output: ${ready.output.slice(0, 500)}`,
+          isError: true,
+        };
+      }
     }
 
-    // Filter: exclude human-only labels and stale in_progress claims
-    const eligible = beads.filter((b) => {
-      if (b.status === "in_progress") return false;
-      const labels = b.labels ?? [];
-      if (labels.some((l) => EXCLUDED_LABELS.includes(l))) return false;
-      return true;
-    });
-
-    if (eligible.length === 0) {
-      return {
-        content: "No actionable beads available. All ready beads are either in_progress or labeled human-only.",
-        isError: true,
-      };
-    }
-
-    // Pick the first eligible bead (br ready returns sorted by priority)
-    const pick = eligible[0];
-    if (!pick) {
+    if (pickId === null || pickTitle === null) {
       return { content: "No actionable beads available.", isError: true };
     }
 
     // Claim it
-    const claim = await run(`br update ${pick.id} --claim`, ctx.workingDir);
+    const claim = await run(`br update ${pickId} --claim`, ctx.workingDir);
     if (!claim.ok) {
-      return { content: `Failed to claim ${pick.id}: ${claim.output}`, isError: true };
+      return { content: `Failed to claim ${pickId}: ${claim.output}`, isError: true };
     }
 
     // Track in session state
-    ctx.setClaimedBeadId(pick.id);
+    ctx.setClaimedBeadId(pickId);
 
     // Log the claim
     ctx.log({
       type: "bead_claim",
       timestamp: new Date().toISOString(),
-      beadId: pick.id,
-      title: pick.title,
+      beadId: pickId,
+      title: pickTitle,
     });
 
     // Get full details for the agent
-    const details = await run(`br show ${pick.id} --json`, ctx.workingDir);
+    const details = await run(`br show ${pickId} --json`, ctx.workingDir);
 
     return {
-      content: `Claimed bead ${pick.id}: ${pick.title}\n\n${details.ok ? details.output : pick.description ?? "(no description)"}`,
+      content: `Claimed bead ${pickId}: ${pickTitle}\n\n${details.ok ? details.output : "(no details available)"}`,
     };
   },
 };
