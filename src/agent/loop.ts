@@ -27,6 +27,7 @@ export async function runAgentLoop(
     injections?: ContextInjection[] | undefined;
     provider?: LLMProvider | undefined;
     logger?: SessionLogger | undefined;
+    notifyHuman?: ((message: string) => Promise<void>) | undefined;
   },
 ): Promise<AgentResult> {
   const startTime = Date.now();
@@ -133,7 +134,7 @@ export async function runAgentLoop(
         call = applyBeforeToolCall(middleware, call);
 
         // Execute the tool
-        let result = await executeTool(call, registry, session, config, logger);
+        let result = await executeTool(call, registry, session, config, logger, options.notifyHuman);
 
         // Apply afterToolResult middleware
         result = applyAfterToolResult(middleware, call, result);
@@ -187,6 +188,7 @@ async function executeTool(
   session: Session,
   config: AgentConfig,
   logger?: SessionLogger,
+  notifyHuman?: (message: string) => Promise<void>,
 ): Promise<ToolResult> {
   const tool = registry.get(call.name);
   if (!tool) {
@@ -212,6 +214,7 @@ async function executeTool(
     sessionId: session.id,
     workingDir: config.workingDir,
     fileReadTimestamps: session.fileReadTimestamps,
+    notifyHuman: notifyHuman ?? (async () => {}),
     log: logger
       ? (event) => {
           logger.log(event);

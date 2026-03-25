@@ -24,6 +24,9 @@ export const escalateTool: Tool<typeof parameters> = {
       await run(`git add -A && git commit -m ${JSON.stringify(commitMsg)}`, ctx.workingDir);
     }
 
+    // Notify human overseer via agent mail
+    await ctx.notifyHuman(`ESCALATION (${params.reason}): ${params.message}`);
+
     // Log escalation event
     ctx.log({
       type: "escalation",

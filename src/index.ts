@@ -53,6 +53,7 @@ import { escalateTool } from "./tools/escalate.js";
 import { readReferenceTool } from "./tools/readReference.js";
 import { connectMcpServers, disconnectAll } from "./mcp/client.js";
 import { bridgeMcpTools } from "./mcp/bridge.js";
+import { createNotifyHuman } from "./mcp/notify.js";
 import { startRepl } from "./cli/repl.js";
 import { runHeadless } from "./cli/headless.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
@@ -163,10 +164,13 @@ async function main(): Promise<void> {
     });
   }
 
+  // Create notifyHuman callback (uses agent mail MCP server if connected)
+  const notifyHuman = createNotifyHuman(mcpServers, config.workingDir, "scuffy");
+
   if (args.headless) {
     const instruction =
       args.instruction ?? process.env["SCUFFY_INSTRUCTION"] ?? DEFAULT_HEADLESS_INSTRUCTION;
-    await runHeadless(registry, middleware, config, provider, instruction);
+    await runHeadless(registry, middleware, config, provider, instruction, notifyHuman);
   } else {
     console.log(`Scuffy agent (${config.provider}/${config.model})`);
     console.log(`Working directory: ${config.workingDir}`);

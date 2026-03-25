@@ -15,6 +15,8 @@ export interface ToolContext {
   workingDir: string;
   /** Tracks which files have been read and when. Enforces read-before-edit. */
   fileReadTimestamps: Map<string, number>;
+  /** Send a notification to the human overseer. No-op if agent mail is not connected. */
+  notifyHuman: (message: string) => Promise<void>;
   log: (event: LogEvent) => void;
 }
 

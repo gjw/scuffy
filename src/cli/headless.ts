@@ -20,6 +20,7 @@ export async function runHeadless(
   config: AgentConfig,
   provider: LLMProvider,
   instruction: string,
+  notifyHuman?: (message: string) => Promise<void>,
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
   const session: Session = {
@@ -52,6 +53,7 @@ export async function runHeadless(
   const result = await runAgentLoop(instruction, session, registry, allMiddleware, config, {
     provider,
     logger,
+    notifyHuman,
   });
 
   console.log(`\n${result.response}`);

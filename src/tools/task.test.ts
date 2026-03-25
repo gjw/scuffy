@@ -39,6 +39,7 @@ function makeCtx(): ToolContext {
     sessionId: "parent-session",
     workingDir: "/tmp",
     fileReadTimestamps: new Map(),
+    notifyHuman: async () => {},
     log: () => {
       /* noop */
     },
