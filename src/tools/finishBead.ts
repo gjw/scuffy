@@ -33,7 +33,7 @@ const parameters = z.object({
     )
     .optional()
     .describe(
-      "Self-report of test files you modified or created. The tool verifies this against git diff. Under-reporting is flagged.",
+      "Self-report of test files you modified, created, or deleted. The tool verifies this against git diff. Under-reporting is flagged.",
     ),
 });
 
@@ -62,10 +62,10 @@ export const finishBeadTool: Tool<typeof parameters> = {
   description:
     "Deterministic completion gate. Runs quality checks, audits test changes, commits work, " +
     "closes the bead, and signals session exit. TEST AUDIT: This tool runs git diff to discover " +
-    "which test files actually changed. If you modified or created any test files, you MUST " +
-    "declare them in testChanges with a reason for each. Unreported test changes will be " +
-    "detected and this tool will reject your submission. Deleting test files is never allowed " +
-    "and will also be rejected. Your self-report is compared against git — discrepancies block completion.",
+    "which test files actually changed — including deletions. If you modified, created, or deleted " +
+    "any test files, you MUST declare them in testChanges with a reason for each. Unreported " +
+    "changes or deletions will be detected and this tool will reject your submission. " +
+    "Your self-report is compared against git — discrepancies block completion.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     const checks = params.checks ?? ["typecheck", "lint"];
@@ -83,7 +83,7 @@ export const finishBeadTool: Tool<typeof parameters> = {
 
     // --- Test change audit ---
 
-    // Detect deleted test files (hard block)
+    // Detect deleted test files
     const deletedResult = await run(
       "git diff --name-only --diff-filter=D HEAD 2>/dev/null || true",
       ctx.workingDir,
@@ -92,34 +92,17 @@ export const finishBeadTool: Tool<typeof parameters> = {
       .split("\n")
       .filter((f) => f.length > 0 && isTestFile(f));
 
-    if (deletedTests.length > 0) {
-      ctx.log({
-        type: "test_audit",
-        timestamp: new Date().toISOString(),
-        beadId: params.beadId,
-        reportedChanges: params.testChanges ?? [],
-        actualChanges: [],
-        deletedTests,
-        result: "deleted_tests",
-      });
-      return {
-        content:
-          `Test audit failed: test file(s) deleted: ${deletedTests.join(", ")}. ` +
-          `Deleting tests is not allowed. Restore them and try again.`,
-        isError: true,
-      };
-    }
-
     // Detect all changed/added test files via git diff
     const diffResult = await run(
       "git diff --name-only HEAD 2>/dev/null && git ls-files --others --exclude-standard 2>/dev/null || true",
       ctx.workingDir,
     );
-    const actualTestChanges = diffResult.output
-      .split("\n")
-      .filter((f) => f.length > 0 && isTestFile(f));
+    const actualTestChanges = [
+      ...diffResult.output.split("\n").filter((f) => f.length > 0 && isTestFile(f)),
+      ...deletedTests,
+    ];
 
-    // Compare self-report against actual changes
+    // Compare self-report against actual changes (including deletions)
     const reportedFiles = new Set((params.testChanges ?? []).map((tc) => tc.file));
     const actualFiles = new Set(actualTestChanges);
 
@@ -133,13 +116,13 @@ export const finishBeadTool: Tool<typeof parameters> = {
         beadId: params.beadId,
         reportedChanges: params.testChanges ?? [],
         actualChanges: actualTestChanges,
-        deletedTests: [],
+        deletedTests,
         result: "unreported_changes",
       });
       return {
         content:
           `Test audit failed: unreported test changes in: ${unreported.join(", ")}. ` +
-          `You must declare all test modifications in testChanges with a reason for each.`,
+          `You must declare all test modifications, creations, and deletions in testChanges with a reason for each.`,
         isError: true,
       };
     }
@@ -154,7 +137,7 @@ export const finishBeadTool: Tool<typeof parameters> = {
       beadId: params.beadId,
       reportedChanges: params.testChanges ?? [],
       actualChanges: actualTestChanges,
-      deletedTests: [],
+      deletedTests,
       result: "clean",
     });
 
