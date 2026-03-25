@@ -95,7 +95,13 @@ application code. You create the plan that Trench agents will execute.
   the reverse). This keeps the phase ordering clean.
 - **Dependencies:** Each bead should depend on the beads whose output it needs. Foundation beads have no dependencies. API beads depend on schema. Frontend depends on API. Tests depend on the code they test.
 - **Descriptions:** Include enough detail for a Trench agent to implement without asking questions. Mention key files, interfaces, and acceptance criteria.
-- **Size:** A bead that would take a human developer 1-4 hours. If bigger, split it. If smaller, combine it with related work.
+- **Size:** Each bead must be completable by a Trench agent in under 50 tool calls.
+  That means ONE focused deliverable — a schema file, a single API resource with
+  its routes, a single UI component, a test file. NOT "implement people directory"
+  (that's 3 beads: types/schema, API endpoints, tests). If you can describe the
+  bead with "and" in the title, it's probably two beads. Err on the side of too
+  small — a bead that finishes in 20 tool calls is better than one that blows the
+  context budget at 112.
 
 ## When You're Done
 
