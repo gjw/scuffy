@@ -19,11 +19,12 @@ The scope of your audit depends on your mode (see below).
 
 3. **Audit** according to your mode (Light or Dark — see sections below).
 
-4. **Create beads** for issues found:
+4. **Create beads** for issues found using the `createBead` tool:
    ```
-   br create --title="Fix: ..." --type=bug --priority=N --labels=warden --description="..."
+   createBead({ title: "Fix: ...", type: "bug", priority: N, labels: ["warden"], description: "..." })
    ```
    Label all warden-created beads with `warden` so they're trackable.
+   Do NOT use `br create` via bash — use the createBead tool.
 
 5. **Call escalate** when done with a summary of findings.
 

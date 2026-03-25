@@ -37,6 +37,9 @@ export const escalateTool: Tool<typeof parameters> = {
     // Record failure outcome to CASS memory
     await ctx.recordOutcome("failure", `${params.reason}: ${params.message}`);
 
+    // Flush beads to JSONL (single export per session)
+    await run("br sync --flush-only", ctx.workingDir);
+
     // Log escalation event
     ctx.log({
       type: "escalation",

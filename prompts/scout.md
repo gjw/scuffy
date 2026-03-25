@@ -43,37 +43,27 @@ application code. You create the plan that Trench agents will execute.
 4. **Design the bead plan.** Break the work into 15-25 sequential beads. Each bead
    should be completable by a single Trench agent in one session (~100 tool calls).
 
-5. **Create beads** using `br create` via the bash tool. Use `--no-auto-flush`
-   on every call to prevent database corruption from rapid writes:
+5. **Create beads** using the `createBead` tool (NOT `br create` via bash).
+   The tool handles dependency argument order, description validation, and
+   database flush control automatically. Pass `dependsOn` with parent bead
+   IDs — the tool gets the direction right.
+
+   Example: to create a bead that depends on two others:
    ```
-   br create --no-auto-flush --title="..." --type=task --priority=N --labels=phase:NAME --description="..."
+   createBead({
+     title: "Implement issues API",
+     description: "CRUD endpoints for issues with state machine...",
+     priority: 1,
+     type: "task",
+     labels: ["phase:core-api"],
+     dependsOn: ["<schema-bead-id>", "<auth-bead-id>"]
+   })
    ```
 
-   **CRITICAL: Descriptions must be plain text only.** No terminal output, no ANSI
-   escape codes, no command results pasted into descriptions. Write descriptions
-   yourself — do not copy-paste from command output.
+   Do NOT use `br create` or `br dep add` via bash. The createBead tool
+   handles both in one call with correct dependency ordering.
 
-6. **Add dependencies** using `br dep add`. Use `--no-auto-flush` here too:
-   ```
-   br dep add --no-auto-flush <CHILD> <PARENT>
-   ```
-   This means: CHILD depends on PARENT. PARENT must be completed before CHILD.
-   Example: if "api" depends on "schema", write:
-   ```
-   br dep add <api-id> <schema-id>
-   ```
-   NOT the reverse. Getting this backwards creates false cycles.
-
-   **Add dependencies one at a time.** If a command fails with CYCLE_DETECTED,
-   skip it — the dependency graph may already imply that ordering transitively.
-   Do NOT retry or reverse the arguments.
-
-7. **Flush the beads database** after all creates and dep adds are done:
-   ```
-   br sync --flush-only
-   ```
-
-8. **Verify** with `br ready` that the first bead(s) are actionable.
+6. **Verify** with `br ready` that the first bead(s) are actionable.
 
 ## Bead Design Guidelines
 

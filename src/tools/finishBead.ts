@@ -168,6 +168,9 @@ export const finishBeadTool: Tool<typeof parameters> = {
             : "")
         : "";
 
+    // Flush beads to JSONL (single export per session, not per operation)
+    await run("br sync --flush-only", ctx.workingDir);
+
     // Record success outcome to CASS memory
     await ctx.recordOutcome("success", params.summary);
 

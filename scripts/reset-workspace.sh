@@ -35,12 +35,17 @@ mkdir -p "$WORKDIR"
 # Restore BRIEF.md
 cp /tmp/ship-BRIEF-backup.md "$WORKDIR/BRIEF.md"
 
-# Create DCG overrides (allow rm -rf in workspace, keep git safety)
+# Create DCG overrides
 cat > "$WORKDIR/.dcg.toml" << 'DCGEOF'
 [overrides]
 allow = [
     "rm -rf",
     "rm -r ",
+]
+
+block = [
+    { pattern = "\\bbr\\s+create\\b", reason = "Use the createBead tool instead of br create via bash." },
+    { pattern = "\\bbr\\s+dep\\s+add\\b", reason = "Use the createBead tool with dependsOn parameter instead of br dep add." },
 ]
 DCGEOF
 
