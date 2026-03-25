@@ -60,9 +60,12 @@ function isTestFile(filename: string): boolean {
 export const finishBeadTool: Tool<typeof parameters> = {
   name: "finishBead",
   description:
-    "Deterministic completion gate. Runs quality checks, audits test changes against your " +
-    "self-report, commits work, closes the bead, and signals session exit. " +
-    "If you modified or created any test files, you MUST declare them in testChanges.",
+    "Deterministic completion gate. Runs quality checks, audits test changes, commits work, " +
+    "closes the bead, and signals session exit. TEST AUDIT: This tool runs git diff to discover " +
+    "which test files actually changed. If you modified or created any test files, you MUST " +
+    "declare them in testChanges with a reason for each. Unreported test changes will be " +
+    "detected and this tool will reject your submission. Deleting test files is never allowed " +
+    "and will also be rejected. Your self-report is compared against git — discrepancies block completion.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     const checks = params.checks ?? ["typecheck", "lint"];
