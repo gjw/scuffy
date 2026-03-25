@@ -17,7 +17,7 @@ const parameters = z.object({
   description: z.string().describe("Plain text description. NO terminal output, NO ANSI codes, NO copy-pasted command results."),
   priority: z.number().int().min(0).max(4).describe("0=critical, 1=high, 2=medium, 3=low, 4=backlog"),
   type: z.enum(["task", "bug", "feature", "chore"]).describe("Bead type."),
-  labels: z.array(z.string()).optional().describe("Labels (e.g. 'phase:api', 'warden'). Phase labels should start with 'phase:'."),
+  labels: z.array(z.string()).optional().describe("Labels for categorization and workflow. Use 'phase:NAME' for phase grouping (e.g. 'phase:foundation', 'phase:core-api'). Other useful labels: 'warden' (created by Warden audit), 'warden-approved', 'needs-e2e-verify', 'blocked', 'tech-debt'. Multiple labels allowed."),
   dependsOn: z.array(z.string()).optional().describe("Bead IDs this depends on. These beads must be completed BEFORE this one. The tool handles the argument order for br dep add — you just list the parent IDs."),
 });
 
