@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CODEAGENT — Scuffy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #faf9f6;
+    --bg-surface: #f0efe8;
+    --bg-inset: #e8e7e0;
+    --text: #1a1a18;
+    --text-muted: #5c5b56;
+    --text-faint: #8a8982;
+    --accent: #c04828;
+    --accent-muted: #d4795e;
+    --border: #d3d1c7;
+    --border-light: #e4e3db;
+    --teal: #0f6e56;
+    --teal-bg: #e1f5ee;
+    --purple: #534ab7;
+    --purple-bg: #eeedfe;
+    --coral: #d85a30;
+    --coral-bg: #faece7;
+    --amber: #ba7517;
+    --amber-bg: #faeeda;
+    --green: #3b6d11;
+    --green-bg: #eaf3de;
+    --red: #993c1d;
+    --red-bg: #fcebeb;
+    --gray-bg: #f1efe8;
+    --font-body: 'Source Serif 4', Georgia, serif;
+    --font-heading: 'DM Sans', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Menlo', monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a;
+      --bg-surface: #2c2c2a;
+      --bg-inset: #3a3a37;
+      --text: #e8e7e0;
+      --text-muted: #b4b2a9;
+      --text-faint: #888780;
+      --accent: #f0997b;
+      --accent-muted: #d4795e;
+      --border: #444441;
+      --border-light: #3a3a37;
+      --teal: #5dcaa5;
+      --teal-bg: #085041;
+      --purple: #afa9ec;
+      --purple-bg: #26215c;
+      --coral: #f0997b;
+      --coral-bg: #4a1b0c;
+      --amber: #fac775;
+      --amber-bg: #412402;
+      --green: #97c459;
+      --green-bg: #173404;
+      --red: #f09595;
+      --red-bg: #501313;
+      --gray-bg: #2c2c2a;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 17px; scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.72;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 3rem 2rem 6rem;
+  }
+  h1 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 2.4rem;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    margin-bottom: 0.3rem;
+    color: var(--text);
+  }
+  h1 span { color: var(--accent); }
+  .subtitle {
+    font-family: var(--font-heading);
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-bottom: 2.5rem;
+    letter-spacing: 0.02em;
+  }
+  h2 {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    font-size: 1.55rem;
+    letter-spacing: -0.02em;
+    margin-top: 3.5rem;
+    margin-bottom: 0.4rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1.5px solid var(--border);
+    color: var(--text);
+  }
+  h3 {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    font-size: 1.15rem;
+    margin-top: 2rem;
+    margin-bottom: 0.5rem;
+    color: var(--text);
+  }
+  p { margin-bottom: 1rem; }
+  strong { font-weight: 600; }
+  code {
+    font-family: var(--font-mono);
+    font-size: 0.82em;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: 4px;
+    padding: 0.12em 0.4em;
+    color: var(--accent);
+  }
+  ul, ol {
+    margin-bottom: 1rem;
+    padding-left: 1.4rem;
+  }
+  li { margin-bottom: 0.35rem; }
+  li::marker { color: var(--text-faint); }
+  a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  a:hover { color: var(--accent-muted); }
+  hr {
+    border: none;
+    border-top: 1px solid var(--border-light);
+    margin: 3rem 0;
+  }
+
+  /* Status table at top */
+  .status-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 2rem;
+    font-family: var(--font-heading);
+    font-size: 0.88rem;
+  }
+  .status-table th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-bottom: 1.5px solid var(--border);
+    padding: 0.5rem 1rem 0.5rem 0;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+  }
+  .status-table td {
+    padding: 0.5rem 1rem 0.5rem 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .badge {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+  }
+  .badge-mvp { background: var(--teal-bg); color: var(--teal); }
+  .badge-final { background: var(--amber-bg); color: var(--amber); }
+  .badge-complete { background: var(--green-bg); color: var(--green); }
+  .badge-pending { background: var(--gray-bg); color: var(--text-faint); }
+
+  /* Data tables in content */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.2rem 0 1.5rem;
+    font-size: 0.92rem;
+  }
+  .data-table th {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    text-align: left;
+    padding: 0.55rem 0.8rem;
+    background: var(--bg-surface);
+    border-bottom: 1.5px solid var(--border);
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    letter-spacing: 0.02em;
+  }
+  .data-table td {
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--border-light);
+    vertical-align: top;
+  }
+  .data-table td code {
+    font-size: 0.82em;
+  }
+
+  /* Diagram containers */
+  .diagram-wrap {
+    margin: 2rem 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 1.5rem;
+    overflow: hidden;
+  }
+  .diagram-wrap svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .diagram-caption {
+    font-family: var(--font-heading);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    text-align: center;
+    margin-top: 0.8rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* Callout boxes */
+  .callout {
+    background: var(--bg-surface);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 8px 8px 0;
+    padding: 1rem 1.2rem;
+    margin: 1.2rem 0;
+    font-size: 0.94rem;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Trace links */
+  .trace-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin: 0.8rem 0;
+  }
+  .trace-card strong {
+    font-family: var(--font-heading);
+    font-weight: 500;
+    color: var(--text);
+  }
+  .trace-card p { font-size: 0.92rem; margin-bottom: 0; }
+
+  /* Placeholder sections */
+  .placeholder {
+    background: var(--bg-surface);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-faint);
+    font-family: var(--font-heading);
+    font-size: 0.9rem;
+    font-style: italic;
+    margin: 1rem 0;
+  }
+
+  /* SVG theme variables for diagrams */
+  .diagram-wrap {
+    --color-text-primary: var(--text);
+    --color-text-secondary: var(--text-muted);
+    --color-text-tertiary: var(--text-faint);
+    --color-background-secondary: var(--bg-surface);
+    --color-border-tertiary: var(--border-light);
+    --color-border-secondary: var(--border);
+    --font-sans: 'DM Sans', system-ui, sans-serif;
+  }
+  .diagram-wrap svg text.t {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 400;
+    fill: var(--text);
+  }
+  .diagram-wrap svg text.ts {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 400;
+    fill: var(--text-muted);
+  }
+  .diagram-wrap svg text.th {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    fill: var(--text);
+  }
+  .diagram-wrap svg .arr {
+    stroke: var(--text-muted);
+    stroke-width: 1.5;
+  }
+  .diagram-wrap svg .leader {
+    stroke: var(--text-faint);
+    stroke-width: 0.5;
+    stroke-dasharray: 4 3;
+  }
+  .diagram-wrap svg .box rect {
+    fill: var(--bg-surface);
+    stroke: var(--border);
+  }
+
+  /* Color classes for SVG nodes */
+  .diagram-wrap svg .c-teal rect { fill: var(--teal-bg); stroke: var(--teal); }
+  .diagram-wrap svg .c-teal text.th,
+  .diagram-wrap svg .c-teal text.t { fill: var(--teal); }
+  .diagram-wrap svg .c-teal text.ts { fill: var(--teal); opacity: 0.75; }
+
+  .diagram-wrap svg .c-purple rect { fill: var(--purple-bg); stroke: var(--purple); }
+  .diagram-wrap svg .c-purple text.th,
+  .diagram-wrap svg .c-purple text.t { fill: var(--purple); }
+  .diagram-wrap svg .c-purple text.ts { fill: var(--purple); opacity: 0.75; }
+  .diagram-wrap svg .c-purple circle { fill: var(--purple); }
+
+  .diagram-wrap svg .c-coral rect { fill: var(--coral-bg); stroke: var(--coral); }
+  .diagram-wrap svg .c-coral text.th,
+  .diagram-wrap svg .c-coral text.t { fill: var(--coral); }
+  .diagram-wrap svg .c-coral text.ts { fill: var(--coral); opacity: 0.75; }
+
+  .diagram-wrap svg .c-amber rect { fill: var(--amber-bg); stroke: var(--amber); }
+  .diagram-wrap svg .c-amber text.th,
+  .diagram-wrap svg .c-amber text.t { fill: var(--amber); }
+  .diagram-wrap svg .c-amber text.ts { fill: var(--amber); opacity: 0.75; }
+
+  .diagram-wrap svg .c-gray rect { fill: var(--gray-bg); stroke: var(--border); }
+  .diagram-wrap svg .c-gray text.th,
+  .diagram-wrap svg .c-gray text.t { fill: var(--text); }
+  .diagram-wrap svg .c-gray text.ts { fill: var(--text-muted); }
+
+  .diagram-wrap svg .c-green rect { fill: var(--green-bg); stroke: var(--green); }
+  .diagram-wrap svg .c-green text.th,
+  .diagram-wrap svg .c-green text.t { fill: var(--green); }
+  .diagram-wrap svg .c-green text.ts { fill: var(--green); opacity: 0.75; }
+
+  .diagram-wrap svg .c-red rect { fill: var(--red-bg); stroke: var(--red); }
+  .diagram-wrap svg .c-red text.th,
+  .diagram-wrap svg .c-red text.t { fill: var(--red); }
+  .diagram-wrap svg .c-red text.ts { fill: var(--red); opacity: 0.75; }
+
+  /* Print styles */
+  @media print {
+    body { max-width: 100%; padding: 1rem; }
+    .diagram-wrap { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CODEAGENT — <span>Scuffy</span></h1>
+<p class="subtitle">Custom TypeScript agent loop &middot; No frameworks &middot; Anchor-based editing &middot; Supervisor multi-agent</p>
+
+<table class="status-table">
+  <thead>
+    <tr><th>Section</th><th>Due</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Agent Architecture</td><td><span class="badge badge-mvp">MVP</span></td><td><span class="badge badge-complete">Complete</span></td></tr>
+    <tr><td>File Editing Strategy</td><td><span class="badge badge-mvp">MVP</span></td><td><span class="badge badge-complete">Complete</span></td></tr>
+    <tr><td>Multi-Agent Design</td><td><span class="badge badge-mvp">MVP</span></td><td><span class="badge badge-complete">Complete</span></td></tr>
+    <tr><td>Trace Links</td><td><span class="badge badge-mvp">MVP</span></td><td><span class="badge badge-complete">Complete</span></td></tr>
+    <tr><td>Architecture Decisions</td><td><span class="badge badge-final">Final</span></td><td><span class="badge badge-pending">—</span></td></tr>
+    <tr><td>Ship Rebuild Log</td><td><span class="badge badge-final">Final</span></td><td><span class="badge badge-pending">—</span></td></tr>
+    <tr><td>Comparative Analysis</td><td><span class="badge badge-final">Final</span></td><td><span class="badge badge-pending">—</span></td></tr>
+    <tr><td>Cost Analysis</td><td><span class="badge badge-final">Final</span></td><td><span class="badge badge-pending">—</span></td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- AGENT ARCHITECTURE                              -->
+<!-- ═══════════════════════════════════════════════ -->
+
+<h2>Agent Architecture <span class="badge badge-mvp">MVP</span></h2>
+
+<h3>Overview</h3>
+<p>Scuffy is a custom TypeScript agent loop — no LangGraph, no LangChain. The core cycle is: assemble messages, call Claude, execute tool calls, repeat until the LLM produces a text response.</p>
+
+<h3>System diagram</h3>
+
+<div class="diagram-wrap">
+<svg width="100%" viewBox="0 0 680 590" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="a1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+<g class="c-gray">
+  <rect x="255" y="24" width="170" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="44" text-anchor="middle" dominant-baseline="central">User instruction</text>
+</g>
+<line x1="340" y1="64" x2="340" y2="90" class="arr" marker-end="url(#a1)"/>
+<g class="c-teal">
+  <rect x="200" y="92" width="260" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="330" y="110" text-anchor="middle" dominant-baseline="central">Build system prompt</text>
+  <text class="ts" x="330" y="130" text-anchor="middle" dominant-baseline="central">context.ts + injections</text>
+</g>
+<line x1="340" y1="148" x2="340" y2="174" class="arr" marker-end="url(#a1)"/>
+<g class="c-purple">
+  <rect x="200" y="176" width="260" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="330" y="194" text-anchor="middle" dominant-baseline="central">beforeLLMCall</text>
+  <text class="ts" x="330" y="214" text-anchor="middle" dominant-baseline="central">Logging + time awareness</text>
+</g>
+<line x1="340" y1="232" x2="340" y2="258" class="arr" marker-end="url(#a1)"/>
+<g class="c-coral">
+  <rect x="200" y="260" width="260" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="330" y="278" text-anchor="middle" dominant-baseline="central">Call Claude API</text>
+  <text class="ts" x="330" y="298" text-anchor="middle" dominant-baseline="central">messages.create</text>
+</g>
+<line x1="340" y1="316" x2="340" y2="342" class="arr" marker-end="url(#a1)"/>
+<g class="c-purple">
+  <rect x="200" y="344" width="260" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="330" y="366" text-anchor="middle" dominant-baseline="central">afterLLMResponse</text>
+</g>
+<line x1="340" y1="388" x2="340" y2="414" class="arr" marker-end="url(#a1)"/>
+<g class="c-amber">
+  <rect x="200" y="416" width="260" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="330" y="438" text-anchor="middle" dominant-baseline="central">Check stop_reason</text>
+</g>
+<text class="ts" x="490" y="426" text-anchor="start">end_turn</text>
+<line x1="460" y1="438" x2="504" y2="438" class="arr" marker-end="url(#a1)"/>
+<g class="c-gray">
+  <rect x="506" y="416" width="140" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="576" y="438" text-anchor="middle" dominant-baseline="central">Return text</text>
+</g>
+<text class="ts" x="348" y="472" text-anchor="start">tool_use</text>
+<line x1="330" y1="460" x2="330" y2="492" class="arr" marker-end="url(#a1)"/>
+<g class="c-teal">
+  <rect x="200" y="494" width="260" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="330" y="512" text-anchor="middle" dominant-baseline="central">Execute tool calls</text>
+  <text class="ts" x="330" y="532" text-anchor="middle" dominant-baseline="central">Zod parse → run → middleware</text>
+</g>
+<path d="M200 522 L120 522 L120 120 L198 120" fill="none" stroke="var(--text-muted)" stroke-width="1" marker-end="url(#a1)"/>
+<text class="ts" x="112" y="330" text-anchor="end" transform="rotate(-90, 112, 330)">Loop</text>
+</svg>
+<div class="diagram-caption">Agent loop — loop.ts core cycle</div>
+</div>
+
+<h3>Entry conditions</h3>
+<ul>
+  <li>The REPL receives a non-empty instruction from the user.</li>
+  <li><code>runAgentLoop()</code> is called with: instruction string, persistent <code>Session</code>, full <code>ToolRegistry</code>, middleware stack, and <code>AgentConfig</code>.</li>
+</ul>
+
+<h3>Exit conditions</h3>
+<ul>
+  <li><strong>Normal:</strong> The LLM returns <code>stop_reason: "end_turn"</code> — it has finished and produced a text response. All text blocks are concatenated and returned.</li>
+  <li><strong>Token limit:</strong> <code>stop_reason: "max_tokens"</code> — the response was cut off. The partial text is returned as-is.</li>
+  <li><strong>Safety cap:</strong> <code>maxIterations</code> reached (default 100). Returns an error message. This prevents runaway tool-call loops.</li>
+</ul>
+
+<h3>Error branches</h3>
+<ul>
+  <li><strong>Unknown tool:</strong> Tool router returns an error message listing available tools. The LLM receives this as a <code>tool_result</code> with <code>is_error: true</code> and can self-correct.</li>
+  <li><strong>Zod validation failure:</strong> Invalid parameters are caught by <code>safeParse()</code>. The error message (including which fields failed) is returned to the LLM.</li>
+  <li><strong>Tool execution error:</strong> All exceptions in <code>tool.execute()</code> are caught. The error message is returned to the LLM as <code>is_error: true</code>. The loop continues — the LLM decides whether to retry, try a different approach, or report the error.</li>
+  <li><strong>API error:</strong> Uncaught — propagates to the REPL, which logs it and prompts for the next instruction. The session is preserved.</li>
+</ul>
+
+<h3>State management</h3>
+<table class="data-table">
+  <thead>
+    <tr><th>State</th><th>Scope</th><th>Persistence</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>Session.messages</code></td><td>Full conversation history</td><td>In-memory, survives across instructions within one REPL session</td></tr>
+    <tr><td><code>Session.fileReadTimestamps</code></td><td>Map of file path → mtime</td><td>In-memory, tracks reads for edit validation</td></tr>
+    <tr><td><code>AgentConfig</code></td><td>Model, tokens, working dir</td><td>Immutable after startup</td></tr>
+    <tr><td><code>ToolRegistry</code></td><td>Registered tools</td><td>Immutable after startup</td></tr>
+    <tr><td>JSONL session log</td><td>Every event in the session</td><td>Append-only file at <code>.scuffy/sessions/{id}.jsonl</code></td></tr>
+  </tbody>
+</table>
+
+<h3>Middleware pipeline</h3>
+<p>Middleware executes in registration order. Each middleware can intercept four points: <code>beforeLLMCall</code>, <code>afterLLMResponse</code>, <code>beforeToolCall</code>, <code>afterToolResult</code>.</p>
+
+<div class="diagram-wrap">
+<svg width="100%" viewBox="0 0 680 400" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="a4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+<rect x="40" y="46" width="270" height="210" rx="14" fill="none" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="6 4"/>
+<text class="ts" x="175" y="66" text-anchor="middle">LLM phase</text>
+<g class="c-purple">
+  <rect x="60" y="78" width="230" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="175" y="98" text-anchor="middle" dominant-baseline="central">beforeLLMCall</text>
+</g>
+<line x1="175" y1="118" x2="175" y2="132" class="arr" marker-end="url(#a4)"/>
+<g class="c-coral">
+  <rect x="60" y="134" width="230" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="175" y="156" text-anchor="middle" dominant-baseline="central">Claude API call</text>
+</g>
+<line x1="175" y1="178" x2="175" y2="192" class="arr" marker-end="url(#a4)"/>
+<g class="c-purple">
+  <rect x="60" y="194" width="230" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="175" y="214" text-anchor="middle" dominant-baseline="central">afterLLMResponse</text>
+</g>
+<text class="ts" x="340" y="130" text-anchor="middle">tool_use</text>
+<line x1="310" y1="140" x2="368" y2="140" class="arr" marker-end="url(#a4)"/>
+<text class="ts" x="340" y="210" text-anchor="middle">end_turn</text>
+<line x1="310" y1="220" x2="350" y2="220" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a4)"/>
+<text class="ts" x="358" y="224" text-anchor="start">exit</text>
+<rect x="370" y="46" width="270" height="210" rx="14" fill="none" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="6 4"/>
+<text class="ts" x="505" y="66" text-anchor="middle">Tool phase</text>
+<g class="c-purple">
+  <rect x="390" y="78" width="230" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="505" y="98" text-anchor="middle" dominant-baseline="central">beforeToolCall</text>
+</g>
+<line x1="505" y1="118" x2="505" y2="132" class="arr" marker-end="url(#a4)"/>
+<g class="c-teal">
+  <rect x="390" y="134" width="230" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="505" y="156" text-anchor="middle" dominant-baseline="central">Tool execution</text>
+</g>
+<line x1="505" y1="178" x2="505" y2="192" class="arr" marker-end="url(#a4)"/>
+<g class="c-purple">
+  <rect x="390" y="194" width="230" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="505" y="214" text-anchor="middle" dominant-baseline="central">afterToolResult</text>
+</g>
+<path d="M505 234 L505 268 L175 268 L175 256" fill="none" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<path d="M175 234 L175 256" fill="none" stroke="var(--text-muted)" stroke-width="1" marker-start="url(#a4)"/>
+<text class="ts" x="340" y="282" text-anchor="middle">Results fed back → next iteration</text>
+<rect x="40" y="310" width="600" height="74" rx="10" fill="var(--bg-surface)" stroke="var(--border)" stroke-width="0.5"/>
+<text class="th" x="60" y="334" dominant-baseline="central">Registration order</text>
+<text class="ts" x="60" y="358" dominant-baseline="central">1. LoggingMiddleware</text>
+<g class="c-purple"><circle cx="260" cy="355" r="5"/></g>
+<g class="c-purple"><circle cx="310" cy="355" r="5"/></g>
+<g class="c-purple"><circle cx="360" cy="355" r="5"/></g>
+<g class="c-purple"><circle cx="410" cy="355" r="5"/></g>
+<text class="ts" x="430" y="358" dominant-baseline="central">All 4 hooks</text>
+<text class="ts" x="60" y="376" dominant-baseline="central">2. TimeAwarenessMiddleware</text>
+<g class="c-purple"><circle cx="260" cy="373" r="5"/></g>
+<circle cx="310" cy="373" r="5" fill="none" stroke="var(--border)" stroke-width="0.5"/>
+<circle cx="360" cy="373" r="5" fill="none" stroke="var(--border)" stroke-width="0.5"/>
+<circle cx="410" cy="373" r="5" fill="none" stroke="var(--border)" stroke-width="0.5"/>
+<text class="ts" x="430" y="376" dominant-baseline="central">beforeLLMCall only</text>
+</svg>
+<div class="diagram-caption">Middleware pipeline — four interception points across LLM and tool phases</div>
+</div>
+
+<h3>Tool registry</h3>
+<p>Tools are registered at startup via <code>ToolRegistry</code>. Each tool is a value with: <code>name</code>, <code>description</code>, <code>parameters</code> (Zod schema), and <code>execute</code> function. The registry converts Zod schemas to Anthropic API tool format via <code>z.toJSONSchema()</code>.</p>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Tool</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>think</code></td><td>No-op reasoning scratchpad</td></tr>
+    <tr><td><code>readFile</code></td><td>Read file with line numbers, pagination</td></tr>
+    <tr><td><code>editFile</code></td><td>Anchor-based surgical edit</td></tr>
+    <tr><td><code>writeFile</code></td><td>Full file write (new files)</td></tr>
+    <tr><td><code>listDir</code></td><td>Directory listing</td></tr>
+    <tr><td><code>glob</code></td><td>File pattern matching</td></tr>
+    <tr><td><code>grep</code></td><td>Content search with regex</td></tr>
+    <tr><td><code>bash</code></td><td>Shell command execution</td></tr>
+    <tr><td><code>task</code></td><td>Spawn ephemeral subagent</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- FILE EDITING STRATEGY                           -->
+<!-- ═══════════════════════════════════════════════ -->
+
+<h2>File Editing Strategy <span class="badge badge-mvp">MVP</span></h2>
+
+<h3>Strategy: anchor-based string replacement</h3>
+<p>We chose anchor-based replacement — the same approach used by Claude Code and OpenCode. The LLM provides an exact <code>old_string</code> to find in the file and a <code>new_string</code> to replace it with. No line numbers, no diffs, no AST parsing.</p>
+
+<div class="callout">
+<p><strong>Why this strategy:</strong></p>
+<ul>
+  <li><strong>Robust to concurrent edits.</strong> String anchors survive line number shifts from earlier edits in the same session.</li>
+  <li><strong>Simple to implement.</strong> ~120 lines including all safety checks.</li>
+  <li><strong>Battle-tested.</strong> Both Claude Code and OpenCode use this pattern in production.</li>
+  <li><strong>LLM-friendly.</strong> Claude produces exact string matches more reliably than it produces well-formed unified diffs or correct line numbers.</li>
+</ul>
+</div>
+
+<h3>Mechanism step by step</h3>
+
+<div class="diagram-wrap">
+<svg width="100%" viewBox="0 0 680 590" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="a2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+<g class="c-gray">
+  <rect x="80" y="24" width="180" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="44" text-anchor="middle" dominant-baseline="central">editFile called</text>
+</g>
+<line x1="170" y1="64" x2="170" y2="86" class="arr" marker-end="url(#a2)"/>
+<g class="c-teal">
+  <rect x="50" y="88" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="110" text-anchor="middle" dominant-baseline="central">Resolve path</text>
+</g>
+<line x1="290" y1="110" x2="420" y2="110" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+<g class="c-red">
+  <rect x="422" y="88" width="210" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="527" y="110" text-anchor="middle" dominant-baseline="central">Traversal blocked</text>
+</g>
+<line x1="170" y1="132" x2="170" y2="154" class="arr" marker-end="url(#a2)"/>
+<g class="c-teal">
+  <rect x="50" y="156" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="178" text-anchor="middle" dominant-baseline="central">Read-before-edit?</text>
+</g>
+<line x1="290" y1="178" x2="420" y2="178" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+<g class="c-red">
+  <rect x="422" y="156" width="210" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="527" y="178" text-anchor="middle" dominant-baseline="central">File not read yet</text>
+</g>
+<line x1="170" y1="200" x2="170" y2="222" class="arr" marker-end="url(#a2)"/>
+<g class="c-teal">
+  <rect x="50" y="224" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="246" text-anchor="middle" dominant-baseline="central">Stale file check</text>
+</g>
+<line x1="290" y1="246" x2="420" y2="246" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+<g class="c-red">
+  <rect x="422" y="224" width="210" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="527" y="246" text-anchor="middle" dominant-baseline="central">Modified since read</text>
+</g>
+<line x1="170" y1="268" x2="170" y2="290" class="arr" marker-end="url(#a2)"/>
+<g class="c-teal">
+  <rect x="50" y="292" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="314" text-anchor="middle" dominant-baseline="central">old === new?</text>
+</g>
+<line x1="290" y1="314" x2="420" y2="314" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+<g class="c-red">
+  <rect x="422" y="292" width="210" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="527" y="314" text-anchor="middle" dominant-baseline="central">No-op rejected</text>
+</g>
+<line x1="170" y1="336" x2="170" y2="358" class="arr" marker-end="url(#a2)"/>
+<g class="c-teal">
+  <rect x="50" y="360" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="382" text-anchor="middle" dominant-baseline="central">Count occurrences</text>
+</g>
+<line x1="290" y1="374" x2="420" y2="374" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+<g class="c-red">
+  <rect x="422" y="352" width="210" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="527" y="372" text-anchor="middle" dominant-baseline="central">0 or >1 matches</text>
+  <text class="ts" x="527" y="392" text-anchor="middle" dominant-baseline="central">Not found / ambiguous</text>
+</g>
+<text class="ts" x="178" y="420" text-anchor="start">= 1</text>
+<line x1="170" y1="404" x2="170" y2="436" class="arr" marker-end="url(#a2)"/>
+<g class="c-teal">
+  <rect x="50" y="438" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="460" text-anchor="middle" dominant-baseline="central">Apply replacement</text>
+</g>
+<line x1="170" y1="482" x2="170" y2="504" class="arr" marker-end="url(#a2)"/>
+<g class="c-green">
+  <rect x="50" y="506" width="240" height="44" rx="8" stroke-width="0.5"/>
+  <text class="th" x="170" y="528" text-anchor="middle" dominant-baseline="central">Write + update mtime</text>
+</g>
+<text class="ts" x="440" y="470" text-anchor="start">Every error returns is_error: true</text>
+<text class="ts" x="440" y="488" text-anchor="start">LLM self-corrects and retries</text>
+<line x1="440" y1="502" x2="540" y2="502" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3" marker-end="url(#a2)"/>
+<text class="ts" x="548" y="506" text-anchor="start">= error path</text>
+</svg>
+<div class="diagram-caption">editFile decision tree — seven gates from call to write</div>
+</div>
+
+<h3>What happens when the location is wrong</h3>
+<p>The LLM gets structured error feedback. Each failure mode maps to a specific, actionable error message:</p>
+
+<table class="data-table">
+  <thead>
+    <tr><th>Failure</th><th>Error returned to LLM</th><th>Expected LLM recovery</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>File not read yet</td><td><code>"file has not been read in this session. Use readFile first"</code></td><td>LLM calls <code>readFile</code>, then retries the edit</td></tr>
+    <tr><td>File modified since read</td><td><code>"file has been modified since last read. Re-read the file first"</code></td><td>LLM re-reads to get current content</td></tr>
+    <tr><td>String not found</td><td><code>"old_string not found in {path}"</code></td><td>LLM re-reads the file, copies the exact text, retries</td></tr>
+    <tr><td>Ambiguous match</td><td><code>"old_string matches N times... Provide more context"</code></td><td>LLM includes more surrounding lines to disambiguate</td></tr>
+  </tbody>
+</table>
+
+<p>The agent loop continues after every error — the LLM receives the error as a <code>tool_result</code> with <code>is_error: true</code> and decides how to recover. The loop only terminates when the LLM produces a text response or <code>maxIterations</code> is hit.</p>
+
+<h3>Design trade-offs</h3>
+<ul>
+  <li><strong>No post-edit type checking (MVP).</strong> OpenCode runs LSP diagnostics after every edit. We deferred this — the LLM can run <code>bash</code> with <code>tsc --noEmit</code> if it wants verification. Adding a <code>typecheck</code> middleware is a planned post-MVP enhancement.</li>
+  <li><strong>No undo stack.</strong> Edits are written directly to disk. Recovery is via <code>git checkout</code> or re-editing. For the Ship rebuild, we'll use git checkpoints.</li>
+  <li><strong>String matching, not fuzzy.</strong> We require exact matches — no whitespace normalization or fuzzy fallback. This is stricter than OpenCode's patch tool but avoids silent misapplication of edits.</li>
+</ul>
+
+<hr>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- MULTI-AGENT DESIGN                              -->
+<!-- ═══════════════════════════════════════════════ -->
+
+<h2>Multi-Agent Design <span class="badge badge-mvp">MVP</span></h2>
+
+<h3>Orchestration model: supervisor via tool call</h3>
+<p>Scuffy uses a <strong>supervisor pattern</strong> — the main agent spawns subagents through the <code>task</code> tool. There is no peer-to-peer communication or shared state between agents.</p>
+
+<div class="diagram-wrap">
+<svg width="100%" viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="a3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+</defs>
+<rect x="30" y="16" width="620" height="430" rx="20" fill="none" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="6 4"/>
+<text class="ts" x="340" y="36" text-anchor="middle">Agent system</text>
+<g class="c-coral">
+  <rect x="190" y="50" width="300" height="56" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="68" text-anchor="middle" dominant-baseline="central">Supervisor</text>
+  <text class="ts" x="340" y="88" text-anchor="middle" dominant-baseline="central">Main agent, spawns via task</text>
+</g>
+<line x1="240" y1="106" x2="170" y2="164" stroke="#D85A30" stroke-width="1" marker-end="url(#a3)"/>
+<text class="ts" x="180" y="132" text-anchor="start">prompt</text>
+<line x1="440" y1="106" x2="510" y2="164" stroke="#D85A30" stroke-width="1" marker-end="url(#a3)"/>
+<text class="ts" x="462" y="132" text-anchor="start">prompt</text>
+<line x1="200" y1="166" x2="280" y2="108" stroke="#1D9E75" stroke-width="1" marker-end="url(#a3)"/>
+<text class="ts" x="210" y="150" text-anchor="start">tool_result</text>
+<line x1="480" y1="166" x2="400" y2="108" stroke="#1D9E75" stroke-width="1" marker-end="url(#a3)"/>
+<text class="ts" x="418" y="150" text-anchor="start">tool_result</text>
+<g class="c-teal">
+  <rect x="50" y="168" width="260" height="190" rx="12" stroke-width="0.5"/>
+  <text class="th" x="180" y="194" text-anchor="middle" dominant-baseline="central">Subagent A</text>
+  <text class="ts" x="180" y="214" text-anchor="middle" dominant-baseline="central">Ephemeral</text>
+</g>
+<g class="c-gray">
+  <rect x="72" y="232" width="216" height="28" rx="6" stroke-width="0.5"/>
+  <text class="ts" x="180" y="246" text-anchor="middle" dominant-baseline="central">Fresh session (new UUID)</text>
+</g>
+<g class="c-gray">
+  <rect x="72" y="268" width="216" height="28" rx="6" stroke-width="0.5"/>
+  <text class="ts" x="180" y="282" text-anchor="middle" dominant-baseline="central">Own fileReadTimestamps</text>
+</g>
+<g class="c-gray">
+  <rect x="72" y="304" width="216" height="28" rx="6" stroke-width="0.5"/>
+  <text class="ts" x="180" y="318" text-anchor="middle" dominant-baseline="central">Own JSONL session log</text>
+</g>
+<g class="c-teal">
+  <rect x="370" y="168" width="260" height="190" rx="12" stroke-width="0.5"/>
+  <text class="th" x="500" y="194" text-anchor="middle" dominant-baseline="central">Subagent B</text>
+  <text class="ts" x="500" y="214" text-anchor="middle" dominant-baseline="central">Ephemeral</text>
+</g>
+<g class="c-gray">
+  <rect x="392" y="232" width="216" height="28" rx="6" stroke-width="0.5"/>
+  <text class="ts" x="500" y="246" text-anchor="middle" dominant-baseline="central">Fresh session (new UUID)</text>
+</g>
+<g class="c-gray">
+  <rect x="392" y="268" width="216" height="28" rx="6" stroke-width="0.5"/>
+  <text class="ts" x="500" y="282" text-anchor="middle" dominant-baseline="central">Own fileReadTimestamps</text>
+</g>
+<g class="c-gray">
+  <rect x="392" y="304" width="216" height="28" rx="6" stroke-width="0.5"/>
+  <text class="ts" x="500" y="318" text-anchor="middle" dominant-baseline="central">Own JSONL session log</text>
+</g>
+<line x1="318" y1="252" x2="362" y2="252" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<line x1="318" y1="280" x2="362" y2="280" stroke="var(--text-muted)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<text class="ts" x="340" y="270" text-anchor="middle">✗</text>
+<text class="ts" x="340" y="308" text-anchor="middle">Isolated</text>
+<g class="c-gray">
+  <rect x="140" y="396" width="400" height="40" rx="8" stroke-width="0.5"/>
+  <text class="th" x="340" y="416" text-anchor="middle" dominant-baseline="central">Shared: ToolRegistry + AgentConfig</text>
+</g>
+<line x1="180" y1="358" x2="260" y2="394" stroke="var(--text-faint)" stroke-width="0.5" stroke-dasharray="4 3"/>
+<line x1="500" y1="358" x2="420" y2="394" stroke="var(--text-faint)" stroke-width="0.5" stroke-dasharray="4 3"/>
+</svg>
+<div class="diagram-caption">Multi-agent supervisor pattern — isolated ephemeral subagents</div>
+</div>
+
+<h3>How agents communicate</h3>
+<ul>
+  <li><strong>Downward (supervisor → subagent):</strong> The prompt string. The subagent starts with zero message history, so the prompt must contain all necessary context. There is no implicit state sharing.</li>
+  <li><strong>Upward (subagent → supervisor):</strong> The subagent's final text response becomes the <code>tool_result</code> content. Metadata (tokens used, duration, tool call count) is attached but not visible to the LLM.</li>
+  <li><strong>Lateral (subagent ↔ subagent):</strong> None. Subagents are isolated. If coordination is needed, the supervisor mediates.</li>
+</ul>
+
+<h3>How parallel outputs are merged</h3>
+<p>When the main agent issues multiple <code>task</code> tool calls in a single response, the agent loop executes them sequentially (current implementation) and returns all results in one <code>tool_result</code> user message. The main agent sees all results in its next turn and is responsible for merging — there is no automatic conflict resolution. The LLM decides how to synthesize.</p>
+
+<h3>Session isolation</h3>
+<p>Each subagent gets:</p>
+<ul>
+  <li>A fresh <code>Session</code> with a new UUID (no shared message history)</li>
+  <li>An empty <code>fileReadTimestamps</code> map (must read files before editing, even if the parent already read them)</li>
+  <li>Its own <code>SessionLogger</code> writing to <code>.scuffy/sessions/sub-{uuid}.jsonl</code></li>
+  <li>The same <code>ToolRegistry</code> and <code>AgentConfig</code> as the parent</li>
+</ul>
+<p>This isolation is deliberate — subagents cannot corrupt the parent's conversation state, and their file edits are tracked independently.</p>
+
+<h3>Recursive subagents</h3>
+<p>The <code>task</code> tool is in the registry, so subagents can spawn their own subagents. Depth is bounded by <code>maxIterations</code> and practical token costs. No explicit depth limit is enforced at MVP.</p>
+
+<hr>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- TRACE LINKS                                     -->
+<!-- ═══════════════════════════════════════════════ -->
+
+<h2>Trace Links <span class="badge badge-mvp">MVP</span></h2>
+
+<p>Session traces are JSONL files in <code>traces/</code>. Each line is a structured event: <code>session_start</code>, <code>llm_request</code>, <code>llm_response</code>, <code>tool_call</code>, <code>tool_result</code>, <code>session_end</code>.</p>
+
+<div class="trace-card">
+  <strong>Trace 1 — Normal run</strong>
+  <p>Agent reads <code>src/tools/think.ts</code>, makes a surgical edit to the description string, then re-reads to verify. Three tool calls: <code>readFile</code> → <code>editFile</code> → <code>readFile</code>. Demonstrates the read-before-edit invariant and successful anchor-based replacement.</p>
+</div>
+
+<div class="trace-card">
+  <strong>Trace 2 — Error recovery</strong>
+  <p>Agent attempts an edit with a non-existent string (fails: file not read + string not found), then self-corrects by reading the file first and retrying with the correct string. Three tool calls: <code>editFile</code> (error) → <code>readFile</code> → <code>editFile</code> (success). Demonstrates error feedback and LLM self-correction.</p>
+</div>
+
+<div class="trace-card">
+  <strong>Trace 3 — Multi-agent</strong>
+  <p>Supervisor agent spawns a subagent via the <code>task</code> tool to read and summarize <code>src/config.ts</code>. Subagent runs in its own session (separate JSONL log), reads the file, returns a structured summary. Parent receives the result as a <code>tool_result</code> and synthesizes the final response. Demonstrates the supervisor orchestration model and session isolation.</p>
+</div>
+
+<hr>
+
+<!-- ═══════════════════════════════════════════════ -->
+<!-- PLACEHOLDER SECTIONS                            -->
+<!-- ═══════════════════════════════════════════════ -->
+
+<h2>Architecture Decisions <span class="badge badge-final">Final</span></h2>
+<div class="placeholder">To be filled during final submission.</div>
+
+<h2>Ship Rebuild Log <span class="badge badge-final">Final</span></h2>
+<div class="placeholder">To be filled during Ship rebuild.</div>
+
+<h2>Comparative Analysis <span class="badge badge-final">Final</span></h2>
+<div class="placeholder">To be filled during final submission.</div>
+
+<h2>Cost Analysis <span class="badge badge-final">Final</span></h2>
+<div class="placeholder">To be filled during final submission.</div>
+
+</body>
+</html>
