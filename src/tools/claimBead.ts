@@ -51,10 +51,19 @@ export const claimBeadTool: Tool<typeof parameters> = {
       };
     }
 
+    // Ensure beads are initialized
+    const initCheck = await run("br list --json", ctx.workingDir);
+    if (!initCheck.ok && initCheck.output.includes("NOT_INITIALIZED")) {
+      await run("br init", ctx.workingDir);
+    }
+
     // Get ready beads
     const ready = await run("br ready --json", ctx.workingDir);
     if (!ready.ok) {
-      return { content: `Failed to get ready beads: ${ready.output}`, isError: true };
+      return {
+        content: `Failed to get ready beads: ${ready.output}\n\nHint: beads may not be initialized. Run 'br init' in the workspace, then create beads with 'br create'.`,
+        isError: true,
+      };
     }
 
     // Parse the output — br ready --json returns an array
@@ -64,7 +73,10 @@ export const claimBeadTool: Tool<typeof parameters> = {
       const arr = z.array(BeadSchema).parse(parsed);
       beads = arr;
     } catch {
-      return { content: `Failed to parse bead list: ${ready.output}`, isError: true };
+      return {
+        content: `Failed to parse bead list. Output was: ${ready.output.slice(0, 500)}\n\nThis may mean beads are not initialized. Use 'br init' then 'br create' to set up work items.`,
+        isError: true,
+      };
     }
 
     // Filter: exclude human-only labels and stale in_progress claims
