@@ -6,9 +6,8 @@
 # State machine that decides which role to spawn based on bead state:
 #   1. No beads → Scout (bootstrap)
 #   2. Phase closing → Dark Warden → Trench → Light Warden → Trench → Tower (replan)
-#   3. N beads completed since last warden → Warden (alternating light/dark)
-#   4. Ready beads exist → Trench
-#   5. Nothing to do → Done
+#   3. Ready beads exist → Trench
+#   4. Nothing to do → Done
 #
 # Brake: touch <workspace>/.pause to stop spawning. Remove to resume.
 #
@@ -43,12 +42,12 @@ spawn_role() {
 
 # Count total beads
 bead_count() {
-  cd "$WORKDIR" && br list --json 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
+  cd "$WORKDIR" && br list --status=open --status=in_progress --status=closed --json --no-auto-flush 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
 }
 
 # Count ready beads
 ready_count() {
-  cd "$WORKDIR" && br ready --json 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
+  cd "$WORKDIR" && br ready --json --no-auto-flush 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
 }
 
 # Check if a phase is closing (all beads in phase are closed except none open)
@@ -56,17 +55,18 @@ ready_count() {
 closing_phase() {
   cd "$WORKDIR" || return
   local beads
-  beads=$(br list --json 2>/dev/null) || return
+  beads=$(br list --status=open --status=in_progress --status=closed --json --no-auto-flush 2>/dev/null) || return
 
   # Find phases that have ALL beads closed
   # A phase is "closing" when it has beads, all are closed, and hasn't been audited yet
   echo "$beads" | jq -r '
+    . as $all |
     [.[] | select(.labels != null and (.labels | type) == "array") | .labels[] | select(startswith("phase:"))] | unique[] as $phase |
     {
       phase: $phase,
-      total: [.[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase)] | length,
-      open: [.[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase) | select(.status != "closed")] | length,
-      has_warden: [.[] | select(.labels != null and (.labels | type) == "array") | select((.labels[] == $phase) and (.labels[] == "warden"))] | length
+      total: [$all[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase)] | length,
+      open: [$all[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase) | select(.status != "closed")] | length,
+      has_warden: [$all[] | select(.labels != null and (.labels | type) == "array") | select((.labels[] == $phase) and (.labels[] == "warden"))] | length
     } | select(.open == 0 and .has_warden == 0) | .phase
   ' 2>/dev/null | head -1
 }
@@ -98,7 +98,7 @@ run_phase_close() {
 drain_warden_beads() {
   while true; do
     local warden_ready
-    warden_ready=$(cd "$WORKDIR" && br list --json 2>/dev/null | jq '[.[] | select(.status != "closed") | select(.labels != null) | select(.labels[] == "warden")] | length' 2>/dev/null || echo "0")
+    warden_ready=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null | jq '[.[] | select(.status != "closed") | select(.labels != null) | select(.labels[] == "warden")] | length' 2>/dev/null || echo "0")
     if [ "$warden_ready" = "0" ] || [ -z "$warden_ready" ]; then
       break
     fi
@@ -177,7 +177,7 @@ while true; do
     continue
   fi
 
-  # 5. Nothing to do
+  # 4. Nothing to do
   echo "No beads ready. Done."
   break
 done
