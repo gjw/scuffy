@@ -136,6 +136,35 @@ one-time setup — the identity persists in the mail server's storage.
 overseer messages to agents. The `/mail/{project}/overseer/compose` endpoint lets
 Chair send high-priority instructions that override agent priorities.
 
+## CASS Memory Integration
+
+Scuffy connects to [CASS](https://github.com/Dicklesworthstone/cass_memory_system)
+for procedural memory across rebuild attempts. Lessons from failed/successful sessions
+are extracted via `cm reflect` and injected into the next attempt via `cm_context`.
+
+**Starting the server:**
+
+```bash
+./scripts/start-cass.sh
+# Or: cm serve --port 8766
+```
+
+**Connecting Scuffy:**
+
+```bash
+SCUFFY_MCP_SERVERS='[...,{"name":"cass","transport":"http","url":"http://127.0.0.1:8766/mcp","tools":["cm_context","cm_feedback","cm_outcome"]}]'
+```
+
+**How it works:**
+
+1. Session start: headless system prompt tells Scuffy to call `mcp_cass_cm_context`
+   with a task description to get relevant lessons from prior sessions
+2. Session end: `finishBead` records success, `escalate` records failure via `cm_outcome`
+3. Between attempts: run `cm reflect` to process session logs into playbook rules
+4. Next attempt: Scuffy gets updated lessons automatically via `cm_context`
+
+**Whitelisted tools:** `cm_context`, `cm_feedback`, `cm_outcome`
+
 ## Testing Notes
 
 **Headless mode and bead workflow:** Headless mode (`--headless --instruction "..."`)

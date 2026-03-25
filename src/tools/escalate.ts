@@ -27,6 +27,9 @@ export const escalateTool: Tool<typeof parameters> = {
     // Notify human overseer via agent mail
     await ctx.notifyHuman(`ESCALATION (${params.reason}): ${params.message}`);
 
+    // Record failure outcome to CASS memory
+    await ctx.recordOutcome("failure", `${params.reason}: ${params.message}`);
+
     // Log escalation event
     ctx.log({
       type: "escalation",

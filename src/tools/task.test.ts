@@ -40,6 +40,7 @@ function makeCtx(): ToolContext {
     workingDir: "/tmp",
     fileReadTimestamps: new Map(),
     notifyHuman: async () => {},
+    recordOutcome: async () => {},
     log: () => {
       /* noop */
     },

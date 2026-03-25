@@ -28,6 +28,7 @@ export async function runAgentLoop(
     provider?: LLMProvider | undefined;
     logger?: SessionLogger | undefined;
     notifyHuman?: ((message: string) => Promise<void>) | undefined;
+    recordOutcome?: ((status: "success" | "failure" | "partial", rules: string) => Promise<void>) | undefined;
   },
 ): Promise<AgentResult> {
   const startTime = Date.now();
@@ -134,7 +135,7 @@ export async function runAgentLoop(
         call = applyBeforeToolCall(middleware, call);
 
         // Execute the tool
-        let result = await executeTool(call, registry, session, config, logger, options.notifyHuman);
+        let result = await executeTool(call, registry, session, config, logger, options.notifyHuman, options.recordOutcome);
 
         // Apply afterToolResult middleware
         result = applyAfterToolResult(middleware, call, result);
@@ -189,6 +190,7 @@ async function executeTool(
   config: AgentConfig,
   logger?: SessionLogger,
   notifyHuman?: (message: string) => Promise<void>,
+  recordOutcome?: (status: "success" | "failure" | "partial", rules: string) => Promise<void>,
 ): Promise<ToolResult> {
   const tool = registry.get(call.name);
   if (!tool) {
@@ -215,6 +217,7 @@ async function executeTool(
     workingDir: config.workingDir,
     fileReadTimestamps: session.fileReadTimestamps,
     notifyHuman: notifyHuman ?? (async () => {}),
+    recordOutcome: recordOutcome ?? (async () => {}),
     log: logger
       ? (event) => {
           logger.log(event);

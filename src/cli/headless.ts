@@ -21,6 +21,7 @@ export async function runHeadless(
   provider: LLMProvider,
   instruction: string,
   notifyHuman?: (message: string) => Promise<void>,
+  recordOutcome?: (status: "success" | "failure" | "partial", rules: string) => Promise<void>,
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
   const session: Session = {
@@ -54,6 +55,7 @@ export async function runHeadless(
     provider,
     logger,
     notifyHuman,
+    recordOutcome,
   });
 
   console.log(`\n${result.response}`);

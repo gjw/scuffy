@@ -54,6 +54,7 @@ import { readReferenceTool } from "./tools/readReference.js";
 import { connectMcpServers, disconnectAll } from "./mcp/client.js";
 import { bridgeMcpTools } from "./mcp/bridge.js";
 import { createNotifyHuman } from "./mcp/notify.js";
+import { createRecordOutcome } from "./mcp/cass.js";
 import { startRepl } from "./cli/repl.js";
 import { runHeadless } from "./cli/headless.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
@@ -62,6 +63,12 @@ import type { LLMProvider } from "./providers/types.js";
 
 const HEADLESS_SYSTEM_PROMPT = `You are Scuffy, an autonomous coding agent running in headless mode.
 You have one job per session: find the next bead, implement it, and exit.
+
+## Memory (if available)
+
+If the mcp_cass_cm_context tool is available, call it FIRST with a brief description
+of your task to retrieve lessons from prior sessions. Apply those lessons to your work.
+If the tool is not available, skip this step.
 
 ## Finding work
 
@@ -164,13 +171,14 @@ async function main(): Promise<void> {
     });
   }
 
-  // Create notifyHuman callback (uses agent mail MCP server if connected)
+  // Create MCP callbacks (no-op when servers aren't connected)
   const notifyHuman = createNotifyHuman(mcpServers, config.workingDir, "scuffy");
+  const recordOutcome = createRecordOutcome(mcpServers);
 
   if (args.headless) {
     const instruction =
       args.instruction ?? process.env["SCUFFY_INSTRUCTION"] ?? DEFAULT_HEADLESS_INSTRUCTION;
-    await runHeadless(registry, middleware, config, provider, instruction, notifyHuman);
+    await runHeadless(registry, middleware, config, provider, instruction, notifyHuman, recordOutcome);
   } else {
     console.log(`Scuffy agent (${config.provider}/${config.model})`);
     console.log(`Working directory: ${config.workingDir}`);

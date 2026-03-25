@@ -17,6 +17,8 @@ export interface ToolContext {
   fileReadTimestamps: Map<string, number>;
   /** Send a notification to the human overseer. No-op if agent mail is not connected. */
   notifyHuman: (message: string) => Promise<void>;
+  /** Record session outcome to CASS memory. No-op if CASS is not connected. */
+  recordOutcome: (status: "success" | "failure" | "partial", rules: string) => Promise<void>;
   log: (event: LogEvent) => void;
 }
 

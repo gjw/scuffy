@@ -168,6 +168,9 @@ export const finishBeadTool: Tool<typeof parameters> = {
             : "")
         : "";
 
+    // Record success outcome to CASS memory
+    await ctx.recordOutcome("success", params.summary);
+
     return {
       content: `Bead ${params.beadId} complete: ${params.summary}${auditNote}`,
       metadata: { exit: true, exitCode: 0 },

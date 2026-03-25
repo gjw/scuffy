@@ -13,6 +13,7 @@ function makeCtx(workingDir: string): ToolContext {
     workingDir,
     fileReadTimestamps: new Map(),
     notifyHuman: async () => {},
+    recordOutcome: async () => {},
     log: () => {
       /* noop */
     },
