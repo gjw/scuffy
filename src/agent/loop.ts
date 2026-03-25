@@ -216,6 +216,10 @@ async function executeTool(
     sessionId: session.id,
     workingDir: config.workingDir,
     fileReadTimestamps: session.fileReadTimestamps,
+    getClaimedBeadId: () => session.claimedBeadId,
+    setClaimedBeadId: (id: string | null) => {
+      session.claimedBeadId = id;
+    },
     notifyHuman: notifyHuman ?? (async () => {}),
     recordOutcome: recordOutcome ?? (async () => {}),
     log: logger

@@ -68,6 +68,13 @@ export type SessionEndEvent = {
   durationMs: number;
 };
 
+export type BeadClaimEvent = {
+  type: "bead_claim";
+  timestamp: string;
+  beadId: string;
+  title: string;
+};
+
 export type BeadCompleteEvent = {
   type: "bead_complete";
   timestamp: string;
@@ -100,6 +107,7 @@ export type LogEvent =
   | ToolCallEvent
   | ToolResultEvent
   | SessionEndEvent
+  | BeadClaimEvent
   | BeadCompleteEvent
   | EscalationEvent
   | TestAuditEvent;

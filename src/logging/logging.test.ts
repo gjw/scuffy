@@ -29,6 +29,7 @@ function makeSession(): Session {
     startedAt: new Date(),
     messages: [],
     fileReadTimestamps: new Map(),
+    claimedBeadId: null,
     logFile: "/tmp/test.jsonl",
   };
 }

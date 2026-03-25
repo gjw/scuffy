@@ -54,6 +54,7 @@ export function createTaskTool(
         startedAt: new Date(),
         messages: [],
         fileReadTimestamps: new Map(),
+        claimedBeadId: null,
         logFile,
       };
 

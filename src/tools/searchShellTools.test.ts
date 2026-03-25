@@ -12,6 +12,8 @@ function makeCtx(workingDir: string): ToolContext {
     sessionId: "test-session",
     workingDir,
     fileReadTimestamps: new Map(),
+    getClaimedBeadId: () => null,
+    setClaimedBeadId: () => {},
     notifyHuman: async () => {},
     recordOutcome: async () => {},
     log: () => {

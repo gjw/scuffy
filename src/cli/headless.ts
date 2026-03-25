@@ -29,6 +29,7 @@ export async function runHeadless(
     startedAt: new Date(),
     messages: [],
     fileReadTimestamps: new Map(),
+    claimedBeadId: null,
     logFile: path.join(config.workingDir, ".scuffy", "sessions", `${sessionId}.jsonl`),
   };
 
