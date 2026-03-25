@@ -82,6 +82,16 @@ export type EscalationEvent = {
   message: string;
 };
 
+export type TestAuditEvent = {
+  type: "test_audit";
+  timestamp: string;
+  beadId: string;
+  reportedChanges: Array<{ file: string; reason: string }>;
+  actualChanges: string[];
+  deletedTests: string[];
+  result: "clean" | "unreported_changes" | "deleted_tests";
+};
+
 export type LogEvent =
   | SessionStartEvent
   | UserInstructionEvent
@@ -91,4 +101,5 @@ export type LogEvent =
   | ToolResultEvent
   | SessionEndEvent
   | BeadCompleteEvent
-  | EscalationEvent;
+  | EscalationEvent
+  | TestAuditEvent;

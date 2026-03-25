@@ -4,6 +4,9 @@ import type { Tool, ToolContext, ToolResult } from "./types.js";
 
 const CHECK_TIMEOUT_MS = 60_000;
 
+/** Glob patterns that identify test files. */
+const TEST_FILE_PATTERNS = [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"];
+
 const parameters = z.object({
   beadId: z.string().describe("The bead ID to close (e.g. 'ship-a1b2')."),
   summary: z
@@ -14,6 +17,23 @@ const parameters = z.object({
     .optional()
     .describe(
       "Quality checks to run. Defaults to ['typecheck', 'lint']. Each maps to `npm run <check>`.",
+    ),
+  testChanges: z
+    .array(
+      z.object({
+        file: z
+          .string()
+          .describe("Relative path to the test file that was modified or created."),
+        reason: z
+          .string()
+          .describe(
+            "Why this test was changed — e.g., 'new test for auth endpoint' or 'updated expected value after API contract change'.",
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      "Self-report of test files you modified or created. The tool verifies this against git diff. Under-reporting is flagged.",
     ),
 });
 
@@ -32,11 +52,17 @@ function run(command: string, cwd: string): Promise<{ ok: boolean; output: strin
   });
 }
 
+/** Check if a filename is a test file. */
+function isTestFile(filename: string): boolean {
+  return TEST_FILE_PATTERNS.some((pattern) => filename.endsWith(pattern));
+}
+
 export const finishBeadTool: Tool<typeof parameters> = {
   name: "finishBead",
   description:
-    "Deterministic completion gate. Runs quality checks, commits work, closes the bead, " +
-    "and signals session exit. Call this when you have finished a bead's work.",
+    "Deterministic completion gate. Runs quality checks, audits test changes against your " +
+    "self-report, commits work, closes the bead, and signals session exit. " +
+    "If you modified or created any test files, you MUST declare them in testChanges.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     const checks = params.checks ?? ["typecheck", "lint"];
@@ -51,6 +77,85 @@ export const finishBeadTool: Tool<typeof parameters> = {
         };
       }
     }
+
+    // --- Test change audit ---
+
+    // Detect deleted test files (hard block)
+    const deletedResult = await run(
+      "git diff --name-only --diff-filter=D HEAD 2>/dev/null || true",
+      ctx.workingDir,
+    );
+    const deletedTests = deletedResult.output
+      .split("\n")
+      .filter((f) => f.length > 0 && isTestFile(f));
+
+    if (deletedTests.length > 0) {
+      ctx.log({
+        type: "test_audit",
+        timestamp: new Date().toISOString(),
+        beadId: params.beadId,
+        reportedChanges: params.testChanges ?? [],
+        actualChanges: [],
+        deletedTests,
+        result: "deleted_tests",
+      });
+      return {
+        content:
+          `Test audit failed: test file(s) deleted: ${deletedTests.join(", ")}. ` +
+          `Deleting tests is not allowed. Restore them and try again.`,
+        isError: true,
+      };
+    }
+
+    // Detect all changed/added test files via git diff
+    const diffResult = await run(
+      "git diff --name-only HEAD 2>/dev/null && git ls-files --others --exclude-standard 2>/dev/null || true",
+      ctx.workingDir,
+    );
+    const actualTestChanges = diffResult.output
+      .split("\n")
+      .filter((f) => f.length > 0 && isTestFile(f));
+
+    // Compare self-report against actual changes
+    const reportedFiles = new Set((params.testChanges ?? []).map((tc) => tc.file));
+    const actualFiles = new Set(actualTestChanges);
+
+    // Under-report: actual changes not declared by agent
+    const unreported = actualTestChanges.filter((f) => !reportedFiles.has(f));
+
+    if (unreported.length > 0) {
+      ctx.log({
+        type: "test_audit",
+        timestamp: new Date().toISOString(),
+        beadId: params.beadId,
+        reportedChanges: params.testChanges ?? [],
+        actualChanges: actualTestChanges,
+        deletedTests: [],
+        result: "unreported_changes",
+      });
+      return {
+        content:
+          `Test audit failed: unreported test changes in: ${unreported.join(", ")}. ` +
+          `You must declare all test modifications in testChanges with a reason for each.`,
+        isError: true,
+      };
+    }
+
+    // Over-report: agent claims changes to files that didn't actually change (warn only)
+    const overReported = (params.testChanges ?? []).filter((tc) => !actualFiles.has(tc.file));
+
+    // Log the audit result
+    ctx.log({
+      type: "test_audit",
+      timestamp: new Date().toISOString(),
+      beadId: params.beadId,
+      reportedChanges: params.testChanges ?? [],
+      actualChanges: actualTestChanges,
+      deletedTests: [],
+      result: "clean",
+    });
+
+    // --- End test change audit ---
 
     // Commit if there are uncommitted changes
     const status = await run("git status --porcelain", ctx.workingDir);
@@ -82,8 +187,17 @@ export const finishBeadTool: Tool<typeof parameters> = {
       summary: params.summary,
     });
 
+    // Build completion message with audit summary
+    const auditNote =
+      actualTestChanges.length > 0
+        ? `\nTest audit: ${String(actualTestChanges.length)} test file(s) changed, all reported.` +
+          (overReported.length > 0
+            ? ` Warning: ${String(overReported.length)} over-reported file(s): ${overReported.map((tc) => tc.file).join(", ")}`
+            : "")
+        : "";
+
     return {
-      content: `Bead ${params.beadId} complete: ${params.summary}`,
+      content: `Bead ${params.beadId} complete: ${params.summary}${auditNote}`,
       metadata: { exit: true, exitCode: 0 },
     };
   },
