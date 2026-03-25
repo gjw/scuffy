@@ -1,0 +1,29 @@
+;; Scuffy Headless Sandbox Profile
+;;
+;; Restricts filesystem writes when running Scuffy in headless mode.
+;; The agent can only write to the target workspace directory and /tmp.
+;; The Scuffy source repo is read-only — no accidental commits.
+;;
+;; Usage:
+;;   sandbox-exec -f sandbox/scuffy-headless.sb -D SCUFFY_WORKSPACE=/path/to/workspace \
+;;     node dist/index.js --headless --workdir /path/to/workspace
+;;
+
+(version 1)
+
+;; Allow everything by default (process, network, mach, sysctl, etc.)
+(allow default)
+
+;; Deny all filesystem writes
+(deny file-write*)
+
+;; Allow writes to the workspace directory (the only place the agent should write)
+(allow file-write* (subpath (param "SCUFFY_WORKSPACE")))
+
+;; Allow writes to temp directories (Node.js and child processes need these)
+(allow file-write* (subpath "/private/tmp"))
+(allow file-write* (subpath "/tmp"))
+(allow file-write* (subpath "/private/var/folders"))
+
+;; Allow writes to /dev (stdout, stderr, /dev/null, etc.)
+(allow file-write* (subpath "/dev"))
