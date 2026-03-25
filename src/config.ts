@@ -28,6 +28,8 @@ export interface McpServerConfig {
   args?: string[] | undefined;
   url?: string | undefined;
   env?: Record<string, string> | undefined;
+  /** Whitelist of tool names to register. If omitted, all tools are registered. */
+  tools?: string[] | undefined;
 }
 
 const McpServerConfigSchema = z.array(
@@ -38,6 +40,7 @@ const McpServerConfigSchema = z.array(
     args: z.array(z.string()).optional(),
     url: z.string().optional(),
     env: z.record(z.string(), z.string()).optional(),
+    tools: z.array(z.string()).optional(),
   }),
 );
 

@@ -143,7 +143,8 @@ async function main(): Promise<void> {
   // Connect to configured MCP servers and register their tools
   const mcpServers = await connectMcpServers(config.mcpServers);
   for (const server of mcpServers) {
-    const tools = await bridgeMcpTools(server.name, server.client);
+    const serverConfig = config.mcpServers.find((s) => s.name === server.name);
+    const tools = await bridgeMcpTools(server.name, server.client, serverConfig?.tools);
     for (const tool of tools) {
       registry.register(tool);
     }

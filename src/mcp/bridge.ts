@@ -5,15 +5,20 @@ import type { Tool, ToolResult } from "../tools/types.js";
 /**
  * Bridge MCP tools from a connected server into Scuffy Tool objects.
  * Tool names are prefixed with the server name to avoid collisions.
+ * If whitelist is provided, only tools with matching names are bridged.
  */
 export async function bridgeMcpTools(
   serverName: string,
   client: Client,
+  whitelist?: string[],
 ): Promise<Tool[]> {
   const { tools: mcpTools } = await client.listTools();
+  const allowSet = whitelist ? new Set(whitelist) : null;
   const bridged: Tool[] = [];
 
   for (const mcpTool of mcpTools) {
+    // Skip tools not in whitelist (if whitelist is specified)
+    if (allowSet && !allowSet.has(mcpTool.name)) continue;
     const toolName = `mcp_${serverName}_${mcpTool.name}`;
     const description = mcpTool.description ?? `MCP tool from ${serverName}`;
 

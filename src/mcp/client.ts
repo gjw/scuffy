@@ -1,19 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-
-export interface McpServerConfig {
-  name: string;
-  transport: "stdio" | "http";
-  /** Command to spawn (stdio transport). */
-  command?: string | undefined;
-  /** Args for the command (stdio transport). */
-  args?: string[] | undefined;
-  /** URL to connect to (http transport). */
-  url?: string | undefined;
-  /** Extra environment variables (stdio transport). */
-  env?: Record<string, string> | undefined;
-}
+import type { McpServerConfig } from "../config.js";
 
 export interface ConnectedServer {
   name: string;
