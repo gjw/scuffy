@@ -324,3 +324,51 @@ currently be used for ad-hoc one-shot tasks without a system prompt change.
 on gpt-4o+ models for prompts ≥1024 tokens. First requests against a new prompt
 will show `cache: 0r/0w`; subsequent requests within ~5-10 minutes will show cache
 hits.
+
+---
+
+## Appendix: Known Bugs and Incidents
+
+### BUG-001: Beads SQLite DB corruption during rapid Scout operations
+
+**Date:** 2026-03-25
+**Scuffy commit:** `8748ba2` (main)
+**Workspace commit:** `f9e0e87` (workspace/ship-rebuild)
+**Session:** `c4ca6b2b-169d-4f6c-a149-16fe3b3c5bd9`
+
+**Symptoms:**
+- `br dep add` returns `CYCLE_DETECTED` on the very first dependency added to
+  an empty graph. Both directions fail. Fresh beads created after the fact CAN
+  have deps added, but deps referencing the original beads fail.
+- `sqlite3 .beads/beads.db ".tables"` returns `database disk image is malformed`.
+- `file .beads/beads.db` shows `database pages 1` on a 340KB file and
+  `cache page size 4294965296` (near uint32 max — garbage header value).
+
+**What Scout did:**
+- Created 20 beads via `br create` in rapid succession (single session, ~33
+  tool calls total)
+- Some bead descriptions contained embedded terminal output from running
+  `npm run typecheck`, `npm run lint`, `npm run test` (ANSI escape codes,
+  vitest formatting, eslint output)
+- Attempted 45 `br dep add` calls — the first 11 all returned CYCLE_DETECTED,
+  the remaining 34 succeeded (suggesting corruption happened partway through)
+
+**Suspected root cause:**
+Not the ANSI codes (SQLite handles arbitrary bytes in TEXT columns). More likely
+concurrent SQLite writes — `br` auto-flushes to JSONL after each operation, and
+rapid sequential `br create` + `br dep add` calls may have caused WAL checkpoint
+collisions or partial writes. The corrupted header (`cache page size` = garbage,
+`database pages` = 1 despite 340KB file) points to a torn write or incomplete
+WAL recovery.
+
+**Mitigation applied:**
+- Scout prompt now explicitly says "do not run quality checks" (removes the
+  source of embedded terminal output in descriptions)
+- Scout prompt says "descriptions must be plain text only"
+- These reduce but don't eliminate the risk — the core issue is rapid sequential
+  `br` operations on the same DB
+
+**Status:** Not reported upstream to beads_rust. If it recurs, file an issue
+with the session log and corrupted DB file as evidence. Consider adding
+`--no-auto-flush` to `br create` calls and doing a single `br sync --flush-only`
+at the end of the Scout session.
