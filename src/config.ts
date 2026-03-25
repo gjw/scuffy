@@ -72,7 +72,7 @@ export function loadConfig(overrides?: Partial<AgentConfig>): AgentConfig {
     maxIterations: overrides?.maxIterations ?? env.SCUFFY_MAX_ITERATIONS ?? DEFAULT_MAX_ITERATIONS,
     tokenBudget: overrides?.tokenBudget ?? env.SCUFFY_TOKEN_BUDGET ?? DEFAULT_TOKEN_BUDGET,
     mcpServers: overrides?.mcpServers ?? parseMcpServers(env.SCUFFY_MCP_SERVERS),
-    agentName: overrides?.agentName ?? env.SCUFFY_AGENT_NAME ?? "GreenCastle",
+    agentName: overrides?.agentName ?? env.SCUFFY_AGENT_NAME ?? "RedTrench",
     systemPrompt: overrides?.systemPrompt ?? "",
     workingDir: overrides?.workingDir ?? process.cwd(),
   };
