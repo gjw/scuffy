@@ -31,6 +31,8 @@ quality standards that must hold regardless of what Scuffy builds.
 
 ## Git Discipline
 
+- Set up .gitignore early — at minimum exclude node_modules, dist, and build
+  artifacts. Tools that respect .gitignore depend on this.
 - Commit after completing each logical unit of work
 - Commit messages describe what changed and why
 - Never commit node_modules, .env files, or build artifacts
