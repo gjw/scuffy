@@ -54,6 +54,7 @@ import { escalateTool } from "./tools/escalate.js";
 import { claimBeadTool } from "./tools/claimBead.js";
 import { createBeadTool } from "./tools/createBead.js";
 import { closeBeadTool } from "./tools/closeBead.js";
+import { flagForChairTool } from "./tools/flagForChair.js";
 import { readReferenceTool } from "./tools/readReference.js";
 import { connectMcpServers, disconnectAll } from "./mcp/client.js";
 import { bridgeMcpTools } from "./mcp/bridge.js";
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
   registry.register(claimBeadTool);
   registry.register(createBeadTool);
   registry.register(closeBeadTool);
+  registry.register(flagForChairTool);
   registry.register(finishBeadTool);
   registry.register(escalateTool);
   registry.register(readReferenceTool);

@@ -85,7 +85,7 @@ export type BeadCompleteEvent = {
 export type EscalationEvent = {
   type: "escalation";
   timestamp: string;
-  reason: "stuck" | "need_replan" | "blocked";
+  reason: "stuck" | "need_replan" | "blocked" | "bead_too_large" | "flag";
   message: string;
 };
 

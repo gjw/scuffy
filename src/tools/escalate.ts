@@ -3,7 +3,7 @@ import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
 const parameters = z.object({
-  reason: z.enum(["stuck", "need_replan", "blocked"]).describe("Why the agent is escalating."),
+  reason: z.enum(["stuck", "need_replan", "blocked", "bead_too_large"]).describe("Why the agent is escalating. Use 'bead_too_large' if the bead scope is clearly too big for one session — summoner will invoke Tower to split it."),
   message: z.string().describe("Human-readable explanation of the situation."),
 });
 
@@ -48,9 +48,15 @@ export const escalateTool: Tool<typeof parameters> = {
       message: params.message,
     });
 
+    // bead_too_large uses exit code 2 (same as budget exceeded → Tower splits)
+    const exitCode = params.reason === "bead_too_large" ? 2 : 1;
+    const beadInfo = claimedId ? ` bead=${claimedId}` : "";
+
     return {
-      content: `Escalated (${params.reason}): ${params.message}`,
-      metadata: { exit: true, exitCode: 1 },
+      content: params.reason === "bead_too_large"
+        ? `BUDGET_EXCEEDED${beadInfo} tools=0 tokens=0/0. Agent self-reported: ${params.message}`
+        : `Escalated (${params.reason}): ${params.message}`,
+      metadata: { exit: true, exitCode },
     };
   },
 };

@@ -4,16 +4,18 @@
 # Usage: ./scripts/summoner.sh [workspace-dir]
 #
 # State machine that decides which role to spawn based on bead state:
-#   1. No beads → Scout (bootstrap)
-#   2. Phase closing → Dark Warden → Trench → Light Warden → Trench → Tower (replan)
-#   3. Budget exceeded → Tower (split the bead)
-#   4. Ready beads exist → Trench
-#   5. Nothing to do → Done
+#   1. Recover stale in_progress beads from crashed sessions
+#   2. No beads → Scout (bootstrap)
+#   3. Phase closing → Dark Warden → Trench → Light Warden → Trench → Tower (replan)
+#   4. Budget exceeded (exit 2) → Tower splits the bead
+#   5. Repeated failure (2x) → Tower review. (3x) → halt bead, flag Chair.
+#   6. Ready beads exist → Trench
+#   7. Nothing to do → Done
 #
 # Exit codes from Scuffy:
 #   0 — finishBead succeeded
 #   1 — escalate called (normal escalation)
-#   2 — token budget exceeded (triggers Tower bead-splitting)
+#   2 — budget exceeded or bead_too_large (triggers Tower bead-splitting)
 #
 # Brake: touch <workspace>/.pause to stop spawning. Remove to resume.
 #
@@ -26,11 +28,92 @@ set -euo pipefail
 WORKDIR="${1:-workspace/ship-rebuild}"
 SCUFFY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PAUSE_ON_ESCALATE="${SUMMONER_PAUSE_ON_ESCALATE:-0}"
-MAX_CONSECUTIVE_ESCALATIONS=3
-escalation_count=0
 LAST_OUTPUT=""
+ATTEMPTS_FILE="$WORKDIR/.summoner-attempts"
+LAST_BEAD_ID=""
 
-# Spawn Scuffy with a specific role. Captures stdout to LAST_OUTPUT.
+# ─── Attempt tracking ─────────────────────────────────────────────────────────
+
+get_attempts() {
+  local bead_id="$1"
+  if [ -f "$ATTEMPTS_FILE" ]; then
+    grep "^${bead_id}=" "$ATTEMPTS_FILE" 2>/dev/null | cut -d= -f2 || echo "0"
+  else
+    echo "0"
+  fi
+}
+
+increment_attempts() {
+  local bead_id="$1"
+  local current
+  current=$(get_attempts "$bead_id")
+  local next=$((current + 1))
+  if [ -f "$ATTEMPTS_FILE" ]; then
+    # Remove old entry and add new one
+    grep -v "^${bead_id}=" "$ATTEMPTS_FILE" > "$ATTEMPTS_FILE.tmp" 2>/dev/null || true
+    mv "$ATTEMPTS_FILE.tmp" "$ATTEMPTS_FILE"
+  fi
+  echo "${bead_id}=${next}" >> "$ATTEMPTS_FILE"
+  echo "$next"
+}
+
+reset_attempts() {
+  local bead_id="$1"
+  if [ -f "$ATTEMPTS_FILE" ]; then
+    grep -v "^${bead_id}=" "$ATTEMPTS_FILE" > "$ATTEMPTS_FILE.tmp" 2>/dev/null || true
+    mv "$ATTEMPTS_FILE.tmp" "$ATTEMPTS_FILE"
+  fi
+}
+
+# ─── Stale bead recovery ──────────────────────────────────────────────────────
+
+recover_stale_beads() {
+  local stale
+  stale=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null | jq -r '.[] | select(.status == "in_progress") | .id' 2>/dev/null) || return
+
+  for bead_id in $stale; do
+    [ -z "$bead_id" ] && continue
+    echo "=== Recovering stale bead: $bead_id ==="
+    cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null || true
+  done
+}
+
+# ─── Branch management ─────────────────────────────────────────────────────────
+
+# Check out the existing branch for a bead (if it exists) or reset to main.
+# 1st attempt on a failed bead: keep the branch (continue partial work)
+# 2nd+ attempt: delete the branch and start fresh from main
+prepare_branch() {
+  local bead_id="$1"
+  local attempts
+  attempts=$(get_attempts "$bead_id")
+
+  cd "$WORKDIR" || return
+
+  # Find existing branch for this bead
+  local branch
+  branch=$(git branch --list "task/${bead_id}-*" 2>/dev/null | sed 's/^[* ]*//' | head -1)
+
+  if [ -z "$branch" ]; then
+    # No existing branch — make sure we're on main
+    git checkout main 2>/dev/null || git checkout -b main 2>/dev/null || true
+    return
+  fi
+
+  if [ "$attempts" -le 1 ]; then
+    # 1st retry: keep the branch, let agent continue partial work
+    echo "  Continuing on existing branch: $branch"
+    git checkout "$branch" 2>/dev/null || true
+  else
+    # 2nd+ retry: delete branch, start fresh from main
+    echo "  Deleting stale branch $branch, starting fresh"
+    git checkout main 2>/dev/null || true
+    git branch -D "$branch" 2>/dev/null || true
+  fi
+}
+
+# ─── Spawning ──────────────────────────────────────────────────────────────────
+
 spawn_role() {
   local role="$1"
   local extra_args="${2:-}"
@@ -48,22 +131,34 @@ spawn_role() {
   return $exit_code
 }
 
-# Extract bead ID from BUDGET_EXCEEDED output line
-extract_budget_bead() {
-  echo "$LAST_OUTPUT" | grep -o 'BUDGET_EXCEEDED bead=[^ ]*' | sed 's/BUDGET_EXCEEDED bead=//' | head -1
+# Extract bead ID from output (BUDGET_EXCEEDED bead=X or bead_claim lines)
+extract_bead_id() {
+  # Try BUDGET_EXCEEDED format first
+  local id
+  id=$(echo "$LAST_OUTPUT" | grep -o 'BUDGET_EXCEEDED bead=[^ ]*' | sed 's/BUDGET_EXCEEDED bead=//' | head -1)
+  if [ -n "$id" ] && [ "$id" != "unknown" ]; then
+    echo "$id"
+    return
+  fi
+  # Fall back to LAST_BEAD_ID set by claim detection
+  echo "$LAST_BEAD_ID"
 }
 
-# Count total beads
+# Try to detect which bead was claimed from session output
+detect_claimed_bead() {
+  LAST_BEAD_ID=$(echo "$LAST_OUTPUT" | grep -o 'Claimed bead [^ :]*' | sed 's/Claimed bead //' | head -1)
+}
+
+# ─── Bead query helpers ────────────────────────────────────────────────────────
+
 bead_count() {
   cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
 }
 
-# Count ready beads
 ready_count() {
   cd "$WORKDIR" && br ready --json --no-auto-flush 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
 }
 
-# Check if a phase is closing
 closing_phase() {
   cd "$WORKDIR" || return
   local beads
@@ -81,14 +176,14 @@ closing_phase() {
   ' 2>/dev/null | head -1
 }
 
-# Run the warden → trench → warden → trench → tower sequence for a phase
+# ─── Phase close sequence ─────────────────────────────────────────────────────
+
 run_phase_close() {
   local phase="$1"
   echo "=== Phase closing: $phase ==="
 
   spawn_role "warden-dark" "Audit phase $phase. Focus on code completed with label $phase." || true
   drain_warden_beads
-
   spawn_role "warden-light" "Audit phase $phase. Focus on code completed with label $phase." || true
   drain_warden_beads
 
@@ -96,7 +191,6 @@ run_phase_close() {
   spawn_role "tower" "Phase $phase is complete. Review remaining work, reprioritize, create new beads if needed." || true
 }
 
-# Work through all warden-created beads
 drain_warden_beads() {
   while true; do
     local warden_ready
@@ -105,65 +199,93 @@ drain_warden_beads() {
       break
     fi
     echo "=== $warden_ready warden bead(s) to fix ==="
-    spawn_role "trench" || handle_exit $?
+    spawn_role "trench"
+    handle_exit $?
   done
 }
 
-# Invoke Tower to split a bead that exceeded token budget
+# ─── Tower interventions ───────────────────────────────────────────────────────
+
 split_bead() {
   local bead_id="$1"
   echo "=== Budget exceeded on $bead_id. Invoking Tower to split. ==="
-
-  # Reset the stuck bead to open so Tower can see it
-  cd "$WORKDIR" && br update "$bead_id" --status=open 2>/dev/null || true
-
-  spawn_role "tower" "Bead $bead_id exceeded the token budget and could not complete in one session. Read the bead description with br show $bead_id. Examine any partial work on disk. Split this bead into 2-3 smaller beads using br create (with --no-auto-flush). Add dependencies between the new beads. Then close the original bead with br close $bead_id --reason 'Split into sub-beads'. Run br sync --flush-only when done." || true
+  cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null || true
+  spawn_role "tower" "Bead $bead_id exceeded the token budget and could not complete in one session. Read the bead description with br show $bead_id. Examine any partial work on disk. Use the createBead tool to split this bead into 2-3 smaller beads. Then use the closeBead tool to close the original. Call escalate when done." || true
 }
 
-# Handle exit codes from spawns
+tower_review_bead() {
+  local bead_id="$1"
+  echo "=== Bead $bead_id failed twice. Invoking Tower to review. ==="
+  cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null || true
+  spawn_role "tower" "Bead $bead_id has failed twice. Trench could not complete it. Read the bead description with br show $bead_id and examine the codebase. Is the description wrong? Is it too big? Does it conflict with existing code? Either: (1) use createBead to split it into smaller beads and closeBead to close the original, (2) update the description if it's wrong, or (3) closeBead it if it's no longer needed. Call escalate when done." || true
+}
+
+halt_bead() {
+  local bead_id="$1"
+  echo "=== Bead $bead_id failed 3 times. Halting. ==="
+  cd "$WORKDIR" && br update "$bead_id" --labels=blocked --no-auto-flush 2>/dev/null || true
+  # TODO: send mail to Chair when agent mail is connected
+}
+
+# ─── Exit handling ─────────────────────────────────────────────────────────────
+
 handle_exit() {
   local exit_code=$1
+  detect_claimed_bead
+
   case $exit_code in
     0)
       echo "=== Bead complete. ==="
-      escalation_count=0
+      if [ -n "$LAST_BEAD_ID" ]; then
+        reset_attempts "$LAST_BEAD_ID"
+      fi
       ;;
     1)
-      escalation_count=$((escalation_count + 1))
-      echo "=== Scuffy escalated ($escalation_count/$MAX_CONSECUTIVE_ESCALATIONS). ==="
-      if [ "$PAUSE_ON_ESCALATE" = "1" ]; then
-        read -r -p "Press Enter to continue (or Ctrl+C to stop)... "
-      elif [ "$escalation_count" -ge "$MAX_CONSECUTIVE_ESCALATIONS" ]; then
-        echo "=== $MAX_CONSECUTIVE_ESCALATIONS consecutive escalations. Stopping. ==="
-        exit 1
+      echo "=== Scuffy escalated. ==="
+      local bead_id
+      bead_id=$(extract_bead_id)
+
+      if [ -n "$bead_id" ]; then
+        local attempts
+        attempts=$(increment_attempts "$bead_id")
+        echo "  Bead $bead_id: attempt $attempts"
+
+        if [ "$attempts" -ge 3 ]; then
+          halt_bead "$bead_id"
+        elif [ "$attempts" -ge 2 ]; then
+          tower_review_bead "$bead_id"
+        else
+          # 1st failure: prepare branch for retry, continue
+          prepare_branch "$bead_id"
+          sleep 3
+        fi
       else
-        sleep 5
+        if [ "$PAUSE_ON_ESCALATE" = "1" ]; then
+          read -r -p "Press Enter to continue (or Ctrl+C to stop)... "
+        else
+          sleep 5
+        fi
       fi
       ;;
     2)
-      # Budget exceeded — invoke Tower to split the bead
+      # Budget exceeded or bead_too_large — Tower splits
       local bead_id
-      bead_id=$(extract_budget_bead)
+      bead_id=$(extract_bead_id)
       if [ -n "$bead_id" ] && [ "$bead_id" != "unknown" ]; then
-        split_bead "$bead_id"
-        escalation_count=0  # Tower intervention resets the counter
+        local attempts
+        attempts=$(increment_attempts "$bead_id")
+        if [ "$attempts" -ge 3 ]; then
+          halt_bead "$bead_id"
+        else
+          split_bead "$bead_id"
+        fi
       else
         echo "=== Budget exceeded but could not identify bead. ==="
-        escalation_count=$((escalation_count + 1))
-        if [ "$escalation_count" -ge "$MAX_CONSECUTIVE_ESCALATIONS" ]; then
-          echo "=== $MAX_CONSECUTIVE_ESCALATIONS consecutive failures. Stopping. ==="
-          exit 1
-        fi
         sleep 5
       fi
       ;;
     *)
-      escalation_count=$((escalation_count + 1))
-      echo "=== Unexpected exit ($exit_code). ($escalation_count/$MAX_CONSECUTIVE_ESCALATIONS) ==="
-      if [ "$escalation_count" -ge "$MAX_CONSECUTIVE_ESCALATIONS" ]; then
-        echo "=== $MAX_CONSECUTIVE_ESCALATIONS consecutive failures. Stopping. ==="
-        exit 1
-      fi
+      echo "=== Unexpected exit ($exit_code). ==="
       sleep 5
       ;;
   esac
@@ -181,6 +303,9 @@ while true; do
     while [ -f "$WORKDIR/.pause" ]; do sleep 5; done
     echo "Resumed."
   fi
+
+  # Recover stale in_progress beads from crashed sessions
+  recover_stale_beads
 
   # Decision: what role to spawn?
   TOTAL=$(bead_count)
