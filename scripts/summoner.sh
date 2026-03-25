@@ -14,7 +14,6 @@
 #
 # Environment:
 #   SUMMONER_PAUSE_ON_ESCALATE=1 — pause for Enter on escalation (default: continue)
-#   SUMMONER_WARDEN_INTERVAL=4   — run Warden every N completed beads (default: 4)
 #   SCUFFY_MCP_SERVERS           — MCP server config JSON (passed through to Scuffy)
 
 set -euo pipefail
@@ -22,27 +21,8 @@ set -euo pipefail
 WORKDIR="${1:-workspace/ship-rebuild}"
 SCUFFY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PAUSE_ON_ESCALATE="${SUMMONER_PAUSE_ON_ESCALATE:-0}"
-WARDEN_INTERVAL="${SUMMONER_WARDEN_INTERVAL:-4}"
 MAX_CONSECUTIVE_ESCALATIONS=3
-
-# State tracking
 escalation_count=0
-beads_since_warden=0
-last_warden_mode="light"  # alternates: light → dark → light
-STATE_FILE="$WORKDIR/.summoner-state"
-
-# Persist state across restarts
-save_state() {
-  echo "beads_since_warden=$beads_since_warden" > "$STATE_FILE"
-  echo "last_warden_mode=$last_warden_mode" >> "$STATE_FILE"
-}
-
-load_state() {
-  if [ -f "$STATE_FILE" ]; then
-    # shellcheck source=/dev/null
-    source "$STATE_FILE"
-  fi
-}
 
 # Spawn Scuffy with a specific role. Returns the exit code.
 spawn_role() {
@@ -81,12 +61,12 @@ closing_phase() {
   # Find phases that have ALL beads closed
   # A phase is "closing" when it has beads, all are closed, and hasn't been audited yet
   echo "$beads" | jq -r '
-    [.[] | select(.labels != null) | .labels[] | select(startswith("phase:"))] | unique[] as $phase |
+    [.[] | select(.labels != null and (.labels | type) == "array") | .labels[] | select(startswith("phase:"))] | unique[] as $phase |
     {
       phase: $phase,
-      total: [.[] | select(.labels != null) | select(.labels[] == $phase)] | length,
-      open: [.[] | select(.labels != null) | select(.labels[] == $phase) | select(.status != "closed")] | length,
-      has_warden: [.[] | select(.labels != null) | select((.labels[] == $phase) and (.labels[] == "warden"))] | length
+      total: [.[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase)] | length,
+      open: [.[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase) | select(.status != "closed")] | length,
+      has_warden: [.[] | select(.labels != null and (.labels | type) == "array") | select((.labels[] == $phase) and (.labels[] == "warden"))] | length
     } | select(.open == 0 and .has_warden == 0) | .phase
   ' 2>/dev/null | head -1
 }
@@ -134,8 +114,6 @@ handle_exit() {
     0)
       echo "=== Bead complete. ==="
       escalation_count=0
-      beads_since_warden=$((beads_since_warden + 1))
-      save_state
       ;;
     1)
       escalation_count=$((escalation_count + 1))
@@ -163,10 +141,7 @@ handle_exit() {
 
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
-load_state
 echo "Summoner started — workspace: $WORKDIR"
-echo "  Warden interval: every $WARDEN_INTERVAL beads"
-echo "  Beads since last warden: $beads_since_warden"
 echo ""
 
 while true; do
@@ -189,30 +164,13 @@ while true; do
   fi
 
   # 2. Phase closing?
-  PHASE=$(closing_phase)
+  PHASE=$(closing_phase || true)
   if [ -n "$PHASE" ]; then
     run_phase_close "$PHASE"
-    beads_since_warden=0
-    save_state
     continue
   fi
 
-  # 3. Time for Warden?
-  if [ "$beads_since_warden" -ge "$WARDEN_INTERVAL" ] && [ "$READY" -gt 0 ]; then
-    if [ "$last_warden_mode" = "light" ]; then
-      last_warden_mode="dark"
-      spawn_role "warden-dark" || true
-    else
-      last_warden_mode="light"
-      spawn_role "warden-light" || true
-    fi
-    beads_since_warden=0
-    save_state
-    drain_warden_beads
-    continue
-  fi
-
-  # 4. Ready beads → Trench
+  # 3. Ready beads → Trench
   if [ "$READY" -gt 0 ]; then
     spawn_role "trench"
     handle_exit $?
