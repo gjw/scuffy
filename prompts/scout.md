@@ -40,8 +40,8 @@ application code. You create the plan that Trench agents will execute.
 
    Do NOT hardcode stack choices — derive them from the BRIEF.
 
-4. **Design the bead plan.** Break the work into 15-25 sequential beads. Each bead
-   should be completable by a single Trench agent in one session (~100 tool calls).
+4. **Design the bead plan.** Break the work into as many beads as needed — the
+   count doesn't matter, the SIZE does. Do NOT merge work to hit a count target.
 
 5. **Create beads** using the `createBead` tool (NOT `br create` via bash).
    The tool handles dependency argument order, description validation, and
