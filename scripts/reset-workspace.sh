@@ -35,6 +35,15 @@ mkdir -p "$WORKDIR"
 # Restore BRIEF.md
 cp /tmp/ship-BRIEF-backup.md "$WORKDIR/BRIEF.md"
 
+# Create DCG overrides (allow rm -rf in workspace, keep git safety)
+cat > "$WORKDIR/.dcg.toml" << 'DCGEOF'
+[overrides]
+allow = [
+    "rm -rf",
+    "rm -r ",
+]
+DCGEOF
+
 # Init git
 cd "$WORKDIR"
 git init -q
