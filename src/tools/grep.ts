@@ -24,6 +24,12 @@ const parameters = z.object({
     ),
 });
 
+/** Directories always excluded from search, regardless of .gitignore. */
+const EXCLUDED_DIRS = ["node_modules", "dist", ".git", ".scuffy"];
+
+/** Max output size in bytes (~100KB). Truncate beyond this. */
+const MAX_OUTPUT_BYTES = 100_000;
+
 /** Run ripgrep and return its output. */
 function runRg(
   args: string[],
@@ -55,6 +61,11 @@ export const grepTool: Tool<typeof parameters> = {
 
     const args: string[] = [];
 
+    // Always exclude noisy directories
+    for (const dir of EXCLUDED_DIRS) {
+      args.push("--glob", `!${dir}`);
+    }
+
     if (params.output_mode !== "content") {
       args.push("--files-with-matches");
     } else {
@@ -82,6 +93,21 @@ export const grepTool: Tool<typeof parameters> = {
     const trimmed = stdout.trim();
     if (trimmed === "") {
       return { content: "No matches found." };
+    }
+
+    // Cap output size to avoid blowing up context window
+    if (Buffer.byteLength(trimmed, "utf-8") > MAX_OUTPUT_BYTES) {
+      const truncated = Buffer.from(trimmed, "utf-8").subarray(0, MAX_OUTPUT_BYTES).toString("utf-8");
+      const lastNewline = truncated.lastIndexOf("\n");
+      const clean = lastNewline > 0 ? truncated.slice(0, lastNewline) : truncated;
+      const totalLines = trimmed.split("\n").length;
+      const shownLines = clean.split("\n").length;
+      return {
+        content:
+          clean +
+          `\n\n[Output truncated: showing ${String(shownLines)} of ${String(totalLines)} lines. ` +
+          `Narrow your search with a more specific pattern or glob filter.]`,
+      };
     }
 
     return { content: trimmed };
