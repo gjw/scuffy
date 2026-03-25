@@ -109,9 +109,44 @@ uvx --python 3.12 --from mcp_agent_mail python -m mcp_agent_mail.http --host 127
 SCUFFY_MCP_SERVERS='[{"name":"mail","transport":"http","url":"http://127.0.0.1:8765/mcp","tools":["send_message","fetch_inbox","register_agent","mark_message_read"]}]'
 ```
 
-**Registering Scuffy as an agent:** Call the `register_agent` MCP tool with this
-repo's absolute path as `project_key` and `"scuffy"` as agent name. This is a
-one-time setup — the identity persists in the mail server's storage.
+**Registering an agent:** Call `ensure_project` with `human_key` = this repo's
+absolute path, then `register_agent` with `project_key` = same path and `name` =
+the agent's mail name (e.g. `"RedTrench"`). Re-registration is an upsert — same
+name returns the existing identity with updated metadata.
+
+### Agent Name Overrides (patched word list)
+
+Agent mail validates names against a fixed 62-adjective × 69-noun word list.
+We patched 6 nouns in the installed source to match our role names:
+
+| Original | Replaced with |
+|---|---|
+| Dog | **Scout** |
+| Cat | **Trench** |
+| Barn | **Warden** |
+| Mill | **Herald** |
+| Lantern | **Sentinel** |
+
+Tower was already in the list. Navigator is reserved for a cross-project
+orchestration role outside Scuffy.
+
+**File:** `/Users/gjw/.local/share/mcp_agent_mail/src/mcp_agent_mail/utils.py`
+(the `NOUNS` tuple near line 90)
+
+**Maintenance:** upgrading mcp_agent_mail (`pip install --upgrade` or `uv tool
+upgrade`) will overwrite this patch. Re-apply after upgrades. The patch is 6
+single-word substitutions — grep for "Scout" in the NOUNS list to check.
+
+### Agent Naming Convention
+
+| Role | Mail Name | Notes |
+|---|---|---|
+| Trench (coder) | Red/Blue/Green/Gold/SilverTrench | RedTrench is the default single-agent identity |
+| Tower (planner) | Bold/CalmTower | |
+| Scout (bootstrap) | SwiftScout | One-shot workspace initializer |
+| Warden (quality) | Bright/DarkWarden | Light = optimistic, Dark = adversarial |
+| Herald (notifications) | GoldHerald | Future use |
+| Sentinel (monitoring) | BrightSentinel | Future use |
 
 **Currently whitelisted:**
 
