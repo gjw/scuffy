@@ -33,8 +33,9 @@ const ROLES: Record<RoleName, RoleConfig> = {
     promptFile: "prompts/scout.md",
     agentName: "SwiftScout",
     defaultInstruction:
-      "Read BRIEF.md. Break the work into beads using br create via bash. " +
-      "Set up dependency graph and phase labels. Call escalate when done planning.",
+      "Read BRIEF.md. Initialize the workspace (git init, br init, scaffold). " +
+      "Break the work into beads using the createBead tool (NOT br via bash). " +
+      "Set up dependency graph and phase labels. Call escalate when done.",
     modelOverride: HEAVY_MODEL,
   },
   trench: {
