@@ -27,12 +27,20 @@ try {
     stdio: ["pipe", "pipe", "pipe"],
   });
   const beads = JSON.parse(brOutput) as Array<{
+    id: string;
     status: string;
     labels: string[] | null;
   }>;
-  beadData.total = beads.length;
-  beadData.closed = beads.filter((b) => b.status === "closed").length;
-  beadData.inProgress = beads.filter((b) => b.status === "in_progress").length;
+  // Count completions from session data (source of truth for finished work)
+  const completedBeadIds = new Set(
+    sessions.filter((s) => s.outcome === "success" && s.beadId).map((s) => s.beadId as string),
+  );
+  // Total = current beads + completed beads that were closed/split by Tower
+  const currentIds = new Set(beads.map((b) => b.id));
+  const goneButCompleted = [...completedBeadIds].filter((id) => !currentIds.has(id));
+  beadData.total = beads.length + goneButCompleted.length;
+  beadData.closed = beads.filter((b) => b.status === "closed" || completedBeadIds.has(b.id)).length + goneButCompleted.length;
+  beadData.inProgress = beads.filter((b) => b.status === "in_progress" && !completedBeadIds.has(b.id)).length;
   beadData.open = beadData.total - beadData.closed - beadData.inProgress;
 
   // Extract phases
@@ -44,7 +52,7 @@ try {
         const phase = label;
         const entry = phaseMap.get(phase) ?? { total: 0, closed: 0 };
         entry.total++;
-        if (bead.status === "closed") entry.closed++;
+        if (bead.status === "closed" || completedBeadIds.has(bead.id)) entry.closed++;
         phaseMap.set(phase, entry);
       }
     }

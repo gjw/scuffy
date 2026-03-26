@@ -34,16 +34,20 @@ workspaceDir = path.resolve(workspaceDir);
 
 // ─── Data fetching ───────────────────────────────────────────────────────────
 
-function fetchBeadData(): DashboardData["beads"] {
+function fetchBeadData(sessions: SessionSummary[]): DashboardData["beads"] {
   const beadData = { total: 0, open: 0, closed: 0, inProgress: 0, phases: [] as Array<{ name: string; total: number; closed: number }> };
   try {
     const brOutput = execFileSync("br", ["list", "--json"], {
       cwd: workspaceDir, timeout: 10_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
     });
-    const beads = JSON.parse(brOutput) as Array<{ status: string; labels: string[] | null }>;
+    const beads = JSON.parse(brOutput) as Array<{ id: string; status: string; labels: string[] | null }>;
+    // Cross-reference with sessions to work around br JSONL dedup bug
+    const completedBeadIds = new Set(
+      sessions.filter((s) => s.outcome === "success" && s.beadId).map((s) => s.beadId),
+    );
     beadData.total = beads.length;
-    beadData.closed = beads.filter((b) => b.status === "closed").length;
-    beadData.inProgress = beads.filter((b) => b.status === "in_progress").length;
+    beadData.closed = beads.filter((b) => b.status === "closed" || completedBeadIds.has(b.id)).length;
+    beadData.inProgress = beads.filter((b) => b.status === "in_progress" && !completedBeadIds.has(b.id)).length;
     beadData.open = beadData.total - beadData.closed - beadData.inProgress;
 
     const phaseMap = new Map<string, { total: number; closed: number }>();
@@ -52,7 +56,7 @@ function fetchBeadData(): DashboardData["beads"] {
         if (label.startsWith("phase:")) {
           const entry = phaseMap.get(label) ?? { total: 0, closed: 0 };
           entry.total++;
-          if (bead.status === "closed") entry.closed++;
+          if (bead.status === "closed" || completedBeadIds.has(bead.id)) entry.closed++;
           phaseMap.set(label, entry);
         }
       }
@@ -82,7 +86,7 @@ function buildDashboardData(): { data: DashboardData; sessions: SessionSummary[]
   const sessions = parseAllSessions(workspaceDir);
   const data: DashboardData = {
     sessions,
-    beads: fetchBeadData(),
+    beads: fetchBeadData(sessions),
     mermaidGraph: fetchMermaidGraph(),
     generatedAt: new Date().toISOString(),
   };
@@ -128,7 +132,8 @@ const server = http.createServer((req, res) => {
 
   if (req.url === "/api/beads") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(fetchBeadData()));
+    const beadSessions = parseAllSessions(workspaceDir);
+    res.end(JSON.stringify(fetchBeadData(beadSessions)));
     return;
   }
 
