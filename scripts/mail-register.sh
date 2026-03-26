@@ -9,6 +9,7 @@ set -euo pipefail
 
 MAIL_URL="${AGENT_MAIL_URL:-http://127.0.0.1:8765/mcp}"
 PROJECT_KEY="/Users/gjw/dev/scuffy"
+MODEL="${SCUFFY_MODEL:-gpt-5.4}"
 
 call_mcp() {
   local id="$1"
@@ -26,11 +27,16 @@ echo "Registering project..."
 call_mcp "1" "ensure_project" "{\"human_key\":\"$PROJECT_KEY\"}"
 
 echo ""
-echo "Registering agents..."
+echo "Registering agents (model: $MODEL)..."
 
+# Human overseer (for receiving flags and notifications)
+echo "  HumanOverseer"
+call_mcp "2" "register_agent" "{\"project_key\":\"$PROJECT_KEY\",\"program\":\"human\",\"model\":\"human\",\"name\":\"HumanOverseer\"}"
+
+# Scuffy agents
 for agent in RedTrench BlueTrench GreenTrench SwiftScout BoldTower DarkWarden BrightWarden; do
   echo "  $agent"
-  call_mcp "2" "register_agent" "{\"project_key\":\"$PROJECT_KEY\",\"program\":\"scuffy-agent\",\"model\":\"claude-sonnet-4-6\",\"name\":\"$agent\"}"
+  call_mcp "2" "register_agent" "{\"project_key\":\"$PROJECT_KEY\",\"program\":\"scuffy-agent\",\"model\":\"$MODEL\",\"name\":\"$agent\"}"
 done
 
 echo ""

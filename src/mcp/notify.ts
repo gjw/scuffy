@@ -21,7 +21,7 @@ export function createNotifyHuman(
         arguments: {
           project_key: projectKey,
           from_agent: agentName,
-          to_agent: "human_overseer",
+          to_agent: "HumanOverseer",
           subject: "Agent notification",
           body: message,
           priority: "high",
