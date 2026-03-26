@@ -19,6 +19,7 @@ const MAIL_URL = process.env["AGENT_MAIL_URL"] ?? "http://127.0.0.1:8765/mcp";
 const PROJECT_KEY = SCUFFY_ROOT;
 const PAUSE_FILE = path.join(WORKDIR, ".pause");
 const ATTEMPTS_FILE = path.join(WORKDIR, ".summoner-attempts");
+const WARDEN_INTERVAL = 8; // Run Warden audit every N completed beads
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -425,12 +426,15 @@ function drainWardenBeads(): void {
 
 // ─── Exit handling ───────────────────────────────────────────────────────────
 
+let completedSinceWarden = 0;
+
 function handleExit(result: SpawnResult): void {
   const beadId = extractBeadId(result.output);
 
   switch (result.exitCode) {
     case 0:
       console.log("=== Bead complete. ===");
+      completedSinceWarden++;
       if (beadId) resetAttempts(beadId);
       break;
 
@@ -576,7 +580,18 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // 3. Ready beads → Trench
+    // 3. Warden audit if enough beads completed since last audit
+    if (completedSinceWarden >= WARDEN_INTERVAL) {
+      console.log(`\n=== ${String(completedSinceWarden)} beads completed since last audit. Running Warden. ===`);
+      spawnRoleClean("warden-dark", `Audit the last ${String(completedSinceWarden)} completed beads. Focus on code quality, test coverage, and integration issues.`);
+      drainWardenBeads();
+      spawnRoleClean("warden-light", `Review the last ${String(completedSinceWarden)} completed beads for polish, cleanup, and documentation.`);
+      drainWardenBeads();
+      completedSinceWarden = 0;
+      continue;
+    }
+
+    // 4. Ready beads → Trench
     if (ready.length > 0) {
       // Health check: if main is broken, force-assign the emergency fix bead
       const emergencyId = ensureMainHealth();
