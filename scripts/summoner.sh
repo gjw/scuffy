@@ -25,8 +25,8 @@
 
 set -euo pipefail
 
-WORKDIR="${1:-workspace/ship-rebuild}"
 SCUFFY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+WORKDIR="$(cd "$SCUFFY_ROOT" && cd "${1:-workspace/ship-rebuild}" && pwd)"
 PAUSE_ON_ESCALATE="${SUMMONER_PAUSE_ON_ESCALATE:-0}"
 LAST_OUTPUT=""
 ATTEMPTS_FILE="$WORKDIR/.summoner-attempts"
@@ -75,7 +75,7 @@ recover_stale_beads() {
   for bead_id in $stale; do
     [ -z "$bead_id" ] && continue
     echo "=== Recovering stale bead: $bead_id ==="
-    cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null || true
+    (cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null) || true
   done
 }
 
@@ -93,23 +93,23 @@ prepare_branch() {
 
   # Find existing branch for this bead
   local branch
-  branch=$(git branch --list "task/${bead_id}-*" 2>/dev/null | sed 's/^[* ]*//' | head -1)
+  branch=$(git -C "$WORKDIR" branch --list "task/${bead_id}-*" 2>/dev/null | sed 's/^[* ]*//' | head -1)
 
   if [ -z "$branch" ]; then
     # No existing branch — make sure we're on main
-    git checkout main 2>/dev/null || git checkout -b main 2>/dev/null || true
+    git -C "$WORKDIR" checkout main 2>/dev/null || git -C "$WORKDIR" checkout -b main 2>/dev/null || true
     return
   fi
 
   if [ "$attempts" -le 1 ]; then
     # 1st retry: keep the branch, let agent continue partial work
     echo "  Continuing on existing branch: $branch"
-    git checkout "$branch" 2>/dev/null || true
+    git -C "$WORKDIR" checkout "$branch" 2>/dev/null || true
   else
     # 2nd+ retry: delete branch, start fresh from main
     echo "  Deleting stale branch $branch, starting fresh"
-    git checkout main 2>/dev/null || true
-    git branch -D "$branch" 2>/dev/null || true
+    git -C "$WORKDIR" checkout main 2>/dev/null || true
+    git -C "$WORKDIR" branch -D "$branch" 2>/dev/null || true
   fi
 }
 
@@ -155,13 +155,13 @@ detect_claimed_bead() {
 
 bead_count() {
   local out
-  out=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null) || { echo "0"; return; }
+  out=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null) || { echo "0"; return 0; }
   echo "$out" | jq 'length' 2>/dev/null || echo "0"
 }
 
 ready_count() {
   local out
-  out=$(cd "$WORKDIR" && br ready --json --no-auto-flush 2>/dev/null) || { echo "0"; return; }
+  out=$(cd "$WORKDIR" && br ready --json --no-auto-flush 2>/dev/null) || { echo "0"; return 0; }
   echo "$out" | jq 'length' 2>/dev/null || echo "0"
 }
 
@@ -217,21 +217,21 @@ drain_warden_beads() {
 split_bead() {
   local bead_id="$1"
   echo "=== Budget exceeded on $bead_id. Invoking Tower to split. ==="
-  cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null || true
+  (cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null) || true
   spawn_role "tower" "Bead $bead_id exceeded the token budget and could not complete in one session. Read the bead description with br show $bead_id. Examine any partial work on disk. Use the createBead tool to split this bead into 2-3 smaller beads. Then use the closeBead tool to close the original. Call escalate when done." || true
 }
 
 tower_review_bead() {
   local bead_id="$1"
   echo "=== Bead $bead_id failed twice. Invoking Tower to review. ==="
-  cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null || true
+  (cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null) || true
   spawn_role "tower" "Bead $bead_id has failed twice. Trench could not complete it. Read the bead description with br show $bead_id and examine the codebase. Is the description wrong? Is it too big? Does it conflict with existing code? Either: (1) use createBead to split it into smaller beads and closeBead to close the original, (2) update the description if it's wrong, or (3) closeBead it if it's no longer needed. Call escalate when done." || true
 }
 
 halt_bead() {
   local bead_id="$1"
   echo "=== Bead $bead_id failed 3 times. Halting. ==="
-  cd "$WORKDIR" && br update "$bead_id" --labels=blocked --no-auto-flush 2>/dev/null || true
+  (cd "$WORKDIR" && br update "$bead_id" --labels=blocked --no-auto-flush 2>/dev/null) || true
   # TODO: send mail to Chair when agent mail is connected
 }
 
