@@ -61,7 +61,19 @@ export const bashTool: Tool<typeof parameters> = {
           if (stderr) parts.push(`[stderr]\n${stderr}`);
           if (parts.length === 0) parts.push("(no output)");
 
-          const output = parts.join("\n");
+          let output = parts.join("\n");
+
+          // Cap output to prevent context bloat (keep first + last lines)
+          const MAX_OUTPUT_CHARS = 8000;
+          if (output.length > MAX_OUTPUT_CHARS) {
+            const lines = output.split("\n");
+            const headLines = lines.slice(0, 40);
+            const tailLines = lines.slice(-20);
+            const omitted = lines.length - 60;
+            output = headLines.join("\n") +
+              `\n\n[... ${String(omitted)} lines omitted — showing first 40 and last 20 of ${String(lines.length)} lines ...]\n\n` +
+              tailLines.join("\n");
+          }
 
           resolve({
             content: `[exit code: ${String(exitCode)}]\n${output}`,
