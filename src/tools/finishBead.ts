@@ -142,6 +142,25 @@ export const finishBeadTool: Tool<typeof parameters> = {
       }
     }
 
+    // Merge task branch to main (keeps main up to date with passing code)
+    const currentBranch = await run("git branch --show-current", ctx.workingDir);
+    const branchName = currentBranch.output.trim();
+    if (branchName && branchName !== "main") {
+      const merge = await run(
+        `git checkout main && git merge ${branchName} --no-edit && git checkout ${branchName}`,
+        ctx.workingDir,
+      );
+      if (!merge.ok) {
+        // Non-fatal — log but don't block completion
+        ctx.log({
+          type: "escalation",
+          timestamp: new Date().toISOString(),
+          reason: "flag" as const,
+          message: `Merge to main failed for branch ${branchName}: ${merge.output.slice(0, 200)}`,
+        });
+      }
+    }
+
     // Close the bead
     const close = await run(
       `br close ${params.beadId} --reason ${JSON.stringify(params.summary)}`,
