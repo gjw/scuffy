@@ -68,8 +68,9 @@ reset_attempts() {
 # ─── Stale bead recovery ──────────────────────────────────────────────────────
 
 recover_stale_beads() {
-  local stale
-  stale=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null | jq -r '.[] | select(.status == "in_progress") | .id' 2>/dev/null) || return
+  local raw stale
+  raw=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null) || return
+  stale=$(echo "$raw" | jq -r '.[] | select(.status == "in_progress") | .id' 2>/dev/null) || return
 
   for bead_id in $stale; do
     [ -z "$bead_id" ] && continue
@@ -177,7 +178,7 @@ closing_phase() {
       open: [$all[] | select(.labels != null and (.labels | type) == "array") | select(.labels[] == $phase) | select(.status != "closed")] | length,
       has_warden: [$all[] | select(.labels != null and (.labels | type) == "array") | select((.labels[] == $phase) and (.labels[] == "warden"))] | length
     } | select(.open == 0 and .has_warden == 0) | .phase
-  ' 2>/dev/null | head -1
+  ' 2>/dev/null | head -1 || true
 }
 
 # ─── Phase close sequence ─────────────────────────────────────────────────────
@@ -198,7 +199,9 @@ run_phase_close() {
 drain_warden_beads() {
   while true; do
     local warden_ready
-    warden_ready=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null | jq '[.[] | select(.status != "closed") | select(.labels != null) | select(.labels[] == "warden")] | length' 2>/dev/null || echo "0")
+    local raw_beads
+    raw_beads=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null) || { warden_ready="0"; break; }
+    warden_ready=$(echo "$raw_beads" | jq '[.[] | select(.status != "closed") | select(.labels != null) | select(.labels[] == "warden")] | length' 2>/dev/null || echo "0")
     if [ "$warden_ready" = "0" ] || [ -z "$warden_ready" ]; then
       break
     fi
