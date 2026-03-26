@@ -20,11 +20,11 @@ export function createNotifyHuman(
         name: "send_message",
         arguments: {
           project_key: projectKey,
-          from_agent: agentName,
-          to_agent: "HumanOverseer",
+          sender_name: agentName,
+          to: ["HumanOverseer"],
           subject: "Agent notification",
-          body: message,
-          priority: "high",
+          body_md: message,
+          importance: "high",
         },
       });
     } catch {

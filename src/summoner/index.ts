@@ -164,8 +164,8 @@ function notifyChair(subject: string, body: string): void {
     const payload = JSON.stringify({
       jsonrpc: "2.0", id: "notify", method: "tools/call",
       params: { name: "send_message", arguments: {
-        project_key: PROJECT_KEY, from_agent: "RedTrench",
-        to_agent: "HumanOverseer", subject, body, priority: "high",
+        project_key: PROJECT_KEY, sender_name: "Summoner",
+        to: ["HumanOverseer"], subject, body_md: body, importance: "high",
       }},
     });
     execFileSync("curl", ["-sS", "--max-time", "5", "-X", "POST", MAIL_URL,
