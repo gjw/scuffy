@@ -273,10 +273,38 @@ export const finishBeadTool: Tool<typeof parameters> = {
       }
     }
 
-    // ── Merge to main (shared) ──
+    // ── Integrate latest main and re-check (catches parallel merge conflicts) ──
 
     const currentBranch = await run("git branch --show-current", ctx.workingDir);
     const branchName = currentBranch.output.trim();
+    if (branchName && branchName !== "main" && !isBypass) {
+      const mergeMain = await run("git merge main --no-edit", ctx.workingDir);
+      if (!mergeMain.ok) {
+        return {
+          content:
+            `Merge conflict with main:\n\n${mergeMain.output.slice(0, 500)}\n\n` +
+            `Your branch has diverged from main. Resolve conflicts and retry finishBead.`,
+          isError: true,
+        };
+      }
+
+      // Re-run quality checks after integrating main (no-op in single-Trench,
+      // catches integration failures when parallel Trenches merge concurrently)
+      for (const check of checks) {
+        const recheck = await run(`npm run ${check}`, ctx.workingDir);
+        if (!recheck.ok) {
+          return {
+            content:
+              `Integration check failed after merging main: npm run ${check}\n\n${recheck.output}\n\n` +
+              `Your code passes alone but conflicts with recent changes on main. Fix and retry.`,
+            isError: true,
+          };
+        }
+      }
+    }
+
+    // ── Merge to main (shared) ──
+
     if (branchName && branchName !== "main") {
       const merge = await run(
         `git checkout main && git merge ${branchName} --no-edit && git checkout ${branchName}`,
