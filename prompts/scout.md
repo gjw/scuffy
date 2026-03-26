@@ -85,13 +85,25 @@ application code. You create the plan that Trench agents will execute.
   the reverse). This keeps the phase ordering clean.
 - **Dependencies:** Each bead should depend on the beads whose output it needs. Foundation beads have no dependencies. API beads depend on schema. Frontend depends on API. Tests depend on the code they test.
 - **Descriptions:** Include enough detail for a Trench agent to implement without asking questions. Mention key files, interfaces, and acceptance criteria.
-- **Size:** Each bead must be completable by a Trench agent in under 50 tool calls.
-  That means ONE focused deliverable — a schema file, a single API resource with
-  its routes, a single UI component, a test file. NOT "implement people directory"
-  (that's 3 beads: types/schema, API endpoints, tests). If you can describe the
-  bead with "and" in the title, it's probably two beads. Err on the side of too
-  small — a bead that finishes in 20 tool calls is better than one that blows the
-  context budget at 112.
+- **Size — THIS IS CRITICAL:** Each bead must complete in under **25 tool calls**.
+  The context window grows with every tool call. At 25 calls, the agent has used
+  roughly half the token budget. Past 40 calls, budget blowout is almost certain.
+
+  A bead is ONE focused deliverable: a single schema file, ONE API resource with
+  its routes, ONE UI component, a single test file. Examples of correct sizing:
+  - "Define Person type and DTOs in shared/" (~10 tool calls)
+  - "Add /api/people CRUD routes" (~20 tool calls)
+  - "Add PeoplePage component with list view" (~15 tool calls)
+
+  Examples of OVERSIZED beads that WILL blow the budget:
+  - "Implement people and reporting module" (too many files)
+  - "Build API skeleton with health, auth, and workspace routes" (3 beads in one)
+  - "Create frontend work views for programs, projects, and issues" (3 pages = 3 beads)
+
+  If the bead title contains "and", it is almost certainly too big. Split it.
+  If the description mentions more than 3 files to create/modify, split it.
+  **20 beads that each take 15 tool calls is vastly better than 8 beads that
+  each blow the budget and need Tower intervention.**
 
 ## When You're Done
 

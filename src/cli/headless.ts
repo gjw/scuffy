@@ -68,8 +68,9 @@ export async function runHeadless(
       if (typeof data === "object" && data !== null && "relevantBullets" in data) {
         const bullets = (data as Record<string, unknown>)["relevantBullets"];
         if (Array.isArray(bullets) && bullets.length > 0) {
-          const lessons = bullets
-            .slice(0, 5)
+          const MAX_LESSONS = 3;
+          const selected = bullets.slice(0, MAX_LESSONS);
+          const lessons = selected
             .map((b: unknown) => {
               if (typeof b === "object" && b !== null && "content" in b) {
                 return `- ${String((b as Record<string, unknown>)["content"])}`;
@@ -80,7 +81,7 @@ export async function runHeadless(
             .join("\n");
           if (lessons.length > 0) {
             cassInstruction = `${instruction}\n\n## Lessons from prior sessions (CASS)\n\n${lessons}`;
-            console.log(`[CASS: injected ${String(bullets.length)} lesson(s)]`);
+            console.log(`[CASS: injected ${String(selected.length)} of ${String(bullets.length)} lesson(s)]`);
           }
         }
       }

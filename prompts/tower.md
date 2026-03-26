@@ -43,11 +43,19 @@ If Chair asks you to do something that's clearly another agent's job, say so.
   with what you decided, why, and what the alternative was. Chair uses these to improve
   the brief and project docs for future runs. Non-blocking: flag it and keep working.
 
-## Task Sizing (when creating work for Trench)
+## Task Sizing (when creating or splitting work for Trench)
 
-Each task must be completeable by a fresh agent in one session without hitting context
-compaction. Target: 3-8 new/modified files, one coherent concern, clear entry and exit
-criteria. If the task description exceeds ~15 lines, it's probably two tasks.
+**The #1 cause of wasted sessions is oversized beads.** Every bead that blows the
+token budget wastes ~$20 and requires a Tower split + retry. Size aggressively small.
+
+- **Target: 15-25 tool calls per bead.** Past 40, budget blowout is near-certain.
+- **Max 3 files created/modified per bead.** More files = more reads = more context.
+- **One concern per bead.** If the title contains "and", split it.
+- **When splitting an oversized bead:** Create 4-5 tiny sub-beads, not 2-3 medium ones.
+  The original bead blew the budget at ~60 tool calls. Splitting into 3 gives ~20 calls
+  each — barely enough margin. Splitting into 5 gives ~12 calls each — safe.
+- **Prefer more beads over fewer.** 30 beads at 15 tool calls each is vastly cheaper
+  than 10 beads where half blow the budget.
 
 **No time estimates.** They're wrong by 5-10x. Specify sequencing and dependencies,
 not hours.
