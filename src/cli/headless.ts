@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import path from "node:path";
 import type { AgentConfig } from "../config.js";
@@ -52,7 +53,43 @@ export async function runHeadless(
   console.log(`Scuffy headless — session ${sessionId}`);
   console.log(`Working directory: ${config.workingDir}`);
 
-  const result = await runAgentLoop(instruction, session, registry, allMiddleware, config, {
+  // Query CASS for relevant lessons from prior sessions
+  let cassInstruction = instruction;
+  try {
+    const taskDesc = instruction.slice(0, 200);
+    const cassOut = execFileSync(
+      "/bin/sh",
+      ["-c", `cm context ${JSON.stringify(taskDesc)} --workspace ${JSON.stringify(config.workingDir)} --json 2>/dev/null`],
+      { timeout: 10_000, encoding: "utf-8" },
+    );
+    const parsed: unknown = JSON.parse(cassOut);
+    if (typeof parsed === "object" && parsed !== null && "data" in parsed) {
+      const data = (parsed as Record<string, unknown>)["data"];
+      if (typeof data === "object" && data !== null && "relevantBullets" in data) {
+        const bullets = (data as Record<string, unknown>)["relevantBullets"];
+        if (Array.isArray(bullets) && bullets.length > 0) {
+          const lessons = bullets
+            .slice(0, 5)
+            .map((b: unknown) => {
+              if (typeof b === "object" && b !== null && "content" in b) {
+                return `- ${String((b as Record<string, unknown>)["content"])}`;
+              }
+              return null;
+            })
+            .filter(Boolean)
+            .join("\n");
+          if (lessons.length > 0) {
+            cassInstruction = `${instruction}\n\n## Lessons from prior sessions (CASS)\n\n${lessons}`;
+            console.log(`[CASS: injected ${String(bullets.length)} lesson(s)]`);
+          }
+        }
+      }
+    }
+  } catch {
+    // cm not available or no lessons — continue without
+  }
+
+  const result = await runAgentLoop(cassInstruction, session, registry, allMiddleware, config, {
     provider,
     logger,
     notifyHuman,
@@ -72,12 +109,24 @@ export async function runHeadless(
   });
   logger.close();
 
+  // Record session outcome to CASS (all roles, all exit codes)
+  try {
+    const outcomeStatus = result.exitCode === 0 ? "success" : result.exitCode === 2 ? "partial" : "failure";
+    const outcomeText = result.response.slice(0, 300);
+    execFileSync(
+      "/bin/sh",
+      ["-c", `cm outcome ${outcomeStatus} "" --text ${JSON.stringify(outcomeText)} --duration ${String(Math.round((Date.now() - startTime) / 1000))} 2>/dev/null`],
+      { cwd: config.workingDir, timeout: 10_000 },
+    );
+  } catch {
+    // cm not available — continue
+  }
+
   // Commit WIP on non-zero exit (budget exceeded, escalation without escalate tool).
   // Escalate tool already commits, but budget guard and crashes don't.
   // Without this, dirty uncommitted files contaminate the next session.
   if (result.exitCode && result.exitCode !== 0) {
     try {
-      const { execFileSync } = await import("node:child_process");
       const status = execFileSync("git", ["status", "--porcelain"], {
         cwd: config.workingDir, encoding: "utf-8", timeout: 10_000,
       }).trim();
