@@ -47,6 +47,8 @@ interface Bead {
   id: string;
   status: string;
   title: string;
+  issue_type: string;
+  priority: number;
   labels: string[] | null;
 }
 
@@ -489,12 +491,12 @@ function ensureMainHealth(): string | null {
   } catch (err: unknown) {
     console.log("  Main has typecheck failures.");
 
-    // Check if an emergency fix bead already exists
+    // Check if an emergency fix bead already exists (any open P0 bug).
+    // Emergency beads are created as type=bug priority=0. Scout creates
+    // P0 tasks/features, not bugs, so this won't match scaffold beads.
     const beads = listBeads();
     const emergency = beads.find(
-      (b) =>
-        b.status !== "closed" &&
-        (b.title.includes("pre-existing") || b.title.includes("Pre-existing")),
+      (b) => b.status !== "closed" && b.issue_type === "bug" && b.priority === 0,
     );
 
     if (emergency) {

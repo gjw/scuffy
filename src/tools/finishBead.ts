@@ -362,9 +362,10 @@ export const finishBeadTool: Tool<typeof parameters> = {
               b !== null &&
               "status" in b &&
               (b as Record<string, unknown>)["status"] !== "closed" &&
-              "title" in b &&
-              typeof (b as Record<string, unknown>)["title"] === "string" &&
-              ((b as Record<string, unknown>)["title"] as string).includes("pre-existing"),
+              "issue_type" in b &&
+              (b as Record<string, unknown>)["issue_type"] === "bug" &&
+              "priority" in b &&
+              (b as Record<string, unknown>)["priority"] === 0,
           );
         }
       } catch {
