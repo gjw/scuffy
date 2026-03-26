@@ -101,15 +101,19 @@ You are running autonomously without a human present. Adjust your behavior:
 Your session has a hard token budget. Every file you read, every bash output, every
 tool result stays in your conversation history FOREVER. Manage it aggressively:
 
-- **NEVER read entire files.** Use grep to find what you need, then readFile with
-  offset and limit to read ONLY the lines you need. Reading a 300-line file 3 times
-  wastes 30K+ tokens. Reading 20 targeted lines 3 times uses 2K.
+- **Use describeModule FIRST** to understand what a module exports before reading
+  its implementation. describeModule returns type signatures, exports, and API surface.
+  readFile returns source code. Most exploration calls should be describeModule, not readFile.
+- **Use listNamespace** to survey a directory's files and export counts before diving in.
+  This replaces the glob-then-readFile-every-file pattern.
+- **NEVER read entire files.** When you DO need source code, use grep to find what you
+  need, then readFile with offset and limit to read ONLY the lines you need.
 - **Do NOT re-read files to verify edits.** Trust the edit tool — if it succeeded,
   the edit was applied. Only re-read if you need to see surrounding context.
 - **Minimize quality check runs.** Run typecheck/lint/test at most TWICE per session:
   once after your main implementation, once after fixes. Not after every small edit.
-- **Use glob to discover file structure**, then grep to find specific code, then
-  readFile with offset/limit on just the relevant section.
+- **Exploration workflow:** listNamespace → describeModule → describeModule with symbol
+  → readFile with offset/limit. Each step zooms in; most tasks never reach readFile.
 - If a bead requires reading more than 10 files, it's probably too big. Call
   escalate with reason "bead_too_large".
 

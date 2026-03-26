@@ -78,6 +78,40 @@ educational, not a summary of your plan.
 - **Markdown formatting:** Always leave a blank line between a heading (or bold line)
   and the first list item, table, or code block below it.
 
+## Code Introspection — describeModule and listNamespace
+
+These tools replace most readFile calls. They return structured API surface information
+without reading implementation code, saving 10-50x context per file.
+
+### When to use what
+
+| Goal | Tool | NOT this |
+|---|---|---|
+| Understand what a module exports | `describeModule({ path })` | `readFile` the whole file |
+| See full definition of one type/function | `describeModule({ path, symbol })` | `readFile` + scroll |
+| See what a file imports | `describeModule({ path, imports: true })` | `grep` for import lines |
+| Survey a directory's files | `listNamespace({ directory })` | `glob` + `readFile` each |
+| See test structure without reading tests | `describeModule({ path, tests: true })` | `readFile` the test file |
+| Find who uses a function | `describeModule({ path, symbol, references: true })` | `grep` + `readFile` each hit |
+| Understand call relationships | `describeModule({ path, symbol, callGraph: true })` | Manual grep chains |
+| Read specific implementation lines | `readFile` with offset/limit | `readFile` the whole file |
+
+### Exploration workflow
+
+1. **listNamespace** — survey directory structure and export counts
+2. **describeModule** — see exports and signatures for a specific file
+3. **describeModule with symbol** — zoom into one export for full details
+4. **readFile with offset/limit** — only when you need the actual implementation
+
+Most tasks complete at step 2 or 3. Reaching step 4 should be rare.
+
+### Rules
+
+- **Always try describeModule before readFile** when exploring unfamiliar code.
+- **Never readFile a whole module** to understand its API. describeModule exists for this.
+- **Use listNamespace** before glob when exploring a directory you haven't seen.
+- **describeModule with tests** replaces reading test files to understand coverage.
+
 ## Finishing a Task
 
 Follow this sequence exactly.

@@ -56,6 +56,8 @@ import { createBeadTool } from "./tools/createBead.js";
 import { closeBeadTool } from "./tools/closeBead.js";
 import { flagForChairTool } from "./tools/flagForChair.js";
 import { readReferenceTool } from "./tools/readReference.js";
+import { describeModuleTool } from "./tools/describeModule.js";
+import { listNamespaceTool } from "./tools/listNamespace.js";
 import { connectMcpServers, disconnectAll } from "./mcp/client.js";
 import { bridgeMcpTools } from "./mcp/bridge.js";
 import { createNotifyHuman } from "./mcp/notify.js";
@@ -174,6 +176,8 @@ async function main(): Promise<void> {
   registry.register(finishBeadTool);
   registry.register(escalateTool);
   registry.register(readReferenceTool);
+  registry.register(describeModuleTool);
+  registry.register(listNamespaceTool);
 
   // Connect to configured MCP servers and register their tools
   const mcpServers = await connectMcpServers(config.mcpServers);
