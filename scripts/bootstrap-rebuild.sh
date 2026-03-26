@@ -37,6 +37,11 @@ if [ ! -d "$WORKDIR/.git" ]; then
 fi
 
 # Beads database (prevents br from walking up to the project root)
+# Always clean-init: remove stale DB/JSONL so bv doesn't see old beads
+if [ -d "$WORKDIR/.beads" ]; then
+  echo "Cleaning stale beads..."
+  rm -f "$WORKDIR/.beads/beads.db" "$WORKDIR/.beads/beads.db-wal" "$WORKDIR/.beads/issues.jsonl"
+fi
 if [ ! -d "$WORKDIR/.beads" ]; then
   echo "Initializing beads in $WORKDIR..."
   (cd "$WORKDIR" && br init)
