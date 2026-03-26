@@ -118,17 +118,18 @@ prepare_branch() {
 spawn_role() {
   local role="$1"
   local extra_args="${2:-}"
+  local log_file="$WORKDIR/.scuffy/last-session.log"
 
   echo "=== Spawning Scuffy as $role ==="
   set +e
   if [ -n "$extra_args" ]; then
-    LAST_OUTPUT=$(node "$SCUFFY_ROOT/dist/index.js" --headless --workdir "$WORKDIR" --role "$role" --instruction "$extra_args" 2>&1)
+    node "$SCUFFY_ROOT/dist/index.js" --headless --workdir "$WORKDIR" --role "$role" --instruction "$extra_args" 2>&1 | tee "$log_file"
   else
-    LAST_OUTPUT=$(node "$SCUFFY_ROOT/dist/index.js" --headless --workdir "$WORKDIR" --role "$role" 2>&1)
+    node "$SCUFFY_ROOT/dist/index.js" --headless --workdir "$WORKDIR" --role "$role" 2>&1 | tee "$log_file"
   fi
-  local exit_code=$?
+  local exit_code=${PIPESTATUS[0]}
   set -e
-  echo "$LAST_OUTPUT"
+  LAST_OUTPUT=$(cat "$log_file" 2>/dev/null || true)
   return $exit_code
 }
 
