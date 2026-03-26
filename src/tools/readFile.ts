@@ -20,8 +20,8 @@ const parameters = z.object({
     .positive()
     .optional()
     .describe(
-      `Maximum number of lines to read. Defaults to ${String(DEFAULT_MAX_LINES)}. ` +
-      "Use grep to find what you need, then readFile with offset/limit to read just those lines.",
+      `Maximum number of lines to read. HARD CAP: ${String(DEFAULT_MAX_LINES)} lines per call regardless of value. ` +
+      "Use grep to find what you need, then multiple readFile calls with offset to paginate.",
     ),
 });
 
@@ -55,9 +55,10 @@ export const readFileTool: Tool<typeof parameters> = {
       const allLines = raw.split("\n");
       const totalLines = allLines.length;
 
-      // Apply offset/limit (1-based) with default cap
+      // Apply offset/limit (1-based) with HARD cap
       const startIndex = params.offset ? params.offset - 1 : 0;
-      const maxLines = params.limit ?? DEFAULT_MAX_LINES;
+      const requestedLines = params.limit ?? DEFAULT_MAX_LINES;
+      const maxLines = Math.min(requestedLines, DEFAULT_MAX_LINES);
       const endIndex = Math.min(startIndex + maxLines, allLines.length);
       const lines = allLines.slice(startIndex, endIndex);
 
