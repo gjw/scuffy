@@ -1,14 +1,15 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
-export type SessionOutcome = "success" | "escalate" | "budget" | "crash";
+export type SessionOutcome = "success" | "escalate" | "budget" | "crash" | "running";
 
 /** Derive agent role from the session instruction text. */
 function deriveRole(instruction: string): string {
   const lower = instruction.toLowerCase();
-  if (lower.includes("break the work into beads") || lower.includes("scaffold the project")) return "scout";
+  if (lower.includes("break the work into beads") || lower.includes("scaffold the project") || lower.includes("initialize the workspace") || lower.includes("createbead tool")) return "scout";
   if (lower.includes("audit phase") || lower.includes("adversarial audit") || lower.includes("quality checks")) return "warden";
-  if (lower.includes("review remaining work") || lower.includes("reprioritize") || lower.includes("split this bead") || lower.includes("has failed twice")) return "tower";
+  if (lower.includes("review remaining work") || lower.includes("reprioritize") || lower.includes("split this bead") || lower.includes("has failed twice") || lower.includes("exceeded the token budget") || lower.includes("oversized bead")) return "tower";
+  if (lower.includes("urgent") && lower.includes("typecheck")) return "trench-emergency";
   if (lower.includes("claimbead") || lower.includes("claim bead") || lower.includes("get your assignment")) return "trench";
   return "trench"; // default
 }
@@ -137,7 +138,7 @@ export function parseSession(filePath: string): SessionSummary {
     }
   }
 
-  // Detect budget exceeded (loop.ts returns without escalation event)
+  // Detect budget exceeded (loop.ts returns with BUDGET_EXCEEDED in final response)
   if (outcome === "crash") {
     for (const line of lines) {
       try {
@@ -145,7 +146,7 @@ export function parseSession(filePath: string): SessionSummary {
         if (
           event.type === "llm_response" &&
           typeof event.content === "string" &&
-          event.content.includes("Token budget exceeded")
+          event.content.includes("BUDGET_EXCEEDED")
         ) {
           outcome = "budget";
           break;
@@ -153,6 +154,14 @@ export function parseSession(filePath: string): SessionSummary {
       } catch {
         continue;
       }
+    }
+  }
+
+  // Detect still-running sessions (no end event, started recently)
+  if (outcome === "crash" && startTime && !endTime) {
+    const ageMs = Date.now() - new Date(startTime).getTime();
+    if (ageMs < 30 * 60 * 1000) {
+      outcome = "running";
     }
   }
 

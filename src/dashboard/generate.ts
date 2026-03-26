@@ -13,8 +13,10 @@ export interface DashboardData {
   beads: BeadSummary;
   mermaidGraph: string;
   generatedAt: string;
-  /** Cost per million tokens (input). Default $2.50 for gpt-5.4. */
+  /** Cost per million tokens (input, non-cached). Default $2.50 for gpt-5.4. */
   costPerMTokenIn?: number | undefined;
+  /** Cost per million cached input tokens. Default $1.25 for gpt-5.4 (50% discount). */
+  costPerMTokenCached?: number | undefined;
   /** Cost per million tokens (output). Default $10 for gpt-5.4. */
   costPerMTokenOut?: number | undefined;
 }
@@ -48,6 +50,7 @@ function outcomeEmoji(outcome: string): string {
     case "success": return "&#9989;";
     case "escalate": return "&#9888;&#65039;";
     case "budget": return "&#128165;";
+    case "running": return "&#9654;&#65039;";
     case "crash": return "&#10060;";
     default: return "?";
   }
@@ -58,6 +61,7 @@ function outcomeClass(outcome: string): string {
     case "success": return "outcome-success";
     case "escalate": return "outcome-escalate";
     case "budget": return "outcome-budget";
+    case "running": return "outcome-running";
     case "crash": return "outcome-crash";
     default: return "";
   }
@@ -67,6 +71,7 @@ function roleColor(role: string): string {
   if (role.includes("scout")) return "#3fb950";
   if (role.includes("tower")) return "#a371f7";
   if (role.includes("warden")) return "#d29922";
+  if (role.includes("emergency")) return "#f85149";
   return "#58a6ff"; // trench / unknown
 }
 
@@ -109,7 +114,7 @@ function renderSessionsTable(sessions: SessionSummary[]): string {
 
 // ─── Stats ───────────────────────────────────────────────────────────────────
 
-function renderStats(sessions: SessionSummary[], costIn: number, costOut: number): string {
+function renderStats(sessions: SessionSummary[], costIn: number, costCached: number, costOut: number): string {
   const total = sessions.length;
   const successes = sessions.filter((s) => s.outcome === "success").length;
   const totalTokensIn = sessions.reduce((sum, s) => sum + s.tokensIn, 0);
@@ -117,7 +122,7 @@ function renderStats(sessions: SessionSummary[], costIn: number, costOut: number
   const totalCacheRead = sessions.reduce((sum, s) => sum + s.cacheRead, 0);
   const avgToolCalls = total > 0 ? Math.round(sessions.reduce((sum, s) => sum + s.toolCalls, 0) / total) : 0;
   const totalDuration = sessions.reduce((sum, s) => sum + s.durationMs, 0);
-  const totalCost = (totalTokensIn / 1_000_000) * costIn + (totalTokensOut / 1_000_000) * costOut;
+  const totalCost = sessions.reduce((sum, s) => sum + sessionCost(s, costIn, costCached, costOut), 0);
 
   return `<div class="stats-grid">
     <div class="stat"><span class="stat-value">${String(total)}</span><span class="stat-label">Sessions</span></div>
@@ -209,6 +214,7 @@ function renderTimeline(sessions: SessionSummary[]): string {
   </div>
   <div class="timeline-legend">
     <span class="legend-item"><span class="legend-dot" style="background:#58a6ff"></span>Trench</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#f85149"></span>Emergency</span>
     <span class="legend-item"><span class="legend-dot" style="background:#3fb950"></span>Scout</span>
     <span class="legend-item"><span class="legend-dot" style="background:#a371f7"></span>Tower</span>
     <span class="legend-item"><span class="legend-dot" style="background:#d29922"></span>Warden</span>
@@ -217,31 +223,27 @@ function renderTimeline(sessions: SessionSummary[]): string {
 
 // ─── Cost Breakdown ──────────────────────────────────────────────────────────
 
-function renderCostBreakdown(sessions: SessionSummary[], costIn: number, costOut: number): string {
+function renderCostBreakdown(sessions: SessionSummary[], costIn: number, costCached: number, costOut: number): string {
   // Per-bead costs
-  const beadCosts = new Map<string, { title: string; tokensIn: number; tokensOut: number; sessions: number }>();
+  const beadCosts = new Map<string, { title: string; cost: number; tokens: number; sessions: number }>();
   for (const s of sessions) {
     const key = s.beadId ?? "(no bead)";
-    const entry = beadCosts.get(key) ?? { title: s.beadTitle ?? key, tokensIn: 0, tokensOut: 0, sessions: 0 };
-    entry.tokensIn += s.tokensIn;
-    entry.tokensOut += s.tokensOut;
+    const entry = beadCosts.get(key) ?? { title: s.beadTitle ?? key, cost: 0, tokens: 0, sessions: 0 };
+    entry.cost += sessionCost(s, costIn, costCached, costOut);
+    entry.tokens += s.tokensIn + s.tokensOut;
     entry.sessions++;
     beadCosts.set(key, entry);
   }
 
   const sorted = [...beadCosts.entries()]
-    .map(([id, data]) => ({
-      id,
-      ...data,
-      cost: (data.tokensIn / 1_000_000) * costIn + (data.tokensOut / 1_000_000) * costOut,
-    }))
+    .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => b.cost - a.cost);
 
   const rows = sorted.slice(0, 15).map((b) => `<tr>
     <td>${escapeHtml(b.id)}</td>
     <td><small>${escapeHtml(b.title)}</small></td>
     <td>${String(b.sessions)}</td>
-    <td>${formatTokens(b.tokensIn + b.tokensOut)}</td>
+    <td>${formatTokens(b.tokens)}</td>
     <td>${formatDollars(b.cost)}</td>
   </tr>`);
 
@@ -249,7 +251,7 @@ function renderCostBreakdown(sessions: SessionSummary[], costIn: number, costOut
     <thead><tr><th>Bead</th><th>Title</th><th>Sessions</th><th>Tokens</th><th>Est. cost</th></tr></thead>
     <tbody>${rows.join("\n")}</tbody>
   </table>
-  <p><small>Pricing: ${formatDollars(costIn)}/M input, ${formatDollars(costOut)}/M output. Top 15 by cost.</small></p>`;
+  <p><small>Pricing: ${formatDollars(costIn)}/M input, ${formatDollars(costCached)}/M cached, ${formatDollars(costOut)}/M output. Top 15 by cost.</small></p>`;
 }
 
 // ─── Error Analysis ──────────────────────────────────────────────────────────
@@ -311,8 +313,15 @@ function renderErrorAnalysis(sessions: SessionSummary[]): string {
 
 // ─── Main Generator ──────────────────────────────────────────────────────────
 
+/** Calculate session cost accounting for cache discount. */
+function sessionCost(s: SessionSummary, costIn: number, costCached: number, costOut: number): number {
+  const uncachedIn = Math.max(0, s.tokensIn - s.cacheRead);
+  return (uncachedIn / 1_000_000) * costIn + (s.cacheRead / 1_000_000) * costCached + (s.tokensOut / 1_000_000) * costOut;
+}
+
 export function generateDashboard(data: DashboardData): string {
   const costIn = data.costPerMTokenIn ?? 2.50;
+  const costCached = data.costPerMTokenCached ?? 1.25;
   const costOut = data.costPerMTokenOut ?? 10.00;
 
   return `<!DOCTYPE html>
@@ -342,6 +351,7 @@ export function generateDashboard(data: DashboardData): string {
   .outcome-success { color: #3fb950; }
   .outcome-escalate { color: #d29922; }
   .outcome-budget { color: #f85149; }
+  .outcome-running { color: #58a6ff; }
   .outcome-crash { color: #f85149; }
   .progress-bar { background: #21262d; border-radius: 4px; height: 16px; overflow: hidden; width: 100%; min-width: 120px; }
   .progress-fill { background: #3fb950; height: 100%; transition: width 0.3s; }
@@ -364,7 +374,7 @@ export function generateDashboard(data: DashboardData): string {
 <p class="generated">Generated ${escapeHtml(data.generatedAt)}</p>
 
 <h2>Cumulative Stats</h2>
-${renderStats(data.sessions, costIn, costOut)}
+${renderStats(data.sessions, costIn, costCached, costOut)}
 
 <h2>Timeline</h2>
 ${renderTimeline(data.sessions)}
@@ -380,7 +390,7 @@ ${data.mermaidGraph || "graph LR\n  empty[No graph data]"}
 </div>
 
 <h2>Cost Breakdown</h2>
-${renderCostBreakdown(data.sessions, costIn, costOut)}
+${renderCostBreakdown(data.sessions, costIn, costCached, costOut)}
 
 <h2>Error Analysis</h2>
 ${renderErrorAnalysis(data.sessions)}
