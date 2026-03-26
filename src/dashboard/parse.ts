@@ -3,6 +3,16 @@ import path from "node:path";
 
 export type SessionOutcome = "success" | "escalate" | "budget" | "crash";
 
+/** Derive agent role from the session instruction text. */
+function deriveRole(instruction: string): string {
+  const lower = instruction.toLowerCase();
+  if (lower.includes("break the work into beads") || lower.includes("scaffold the project")) return "scout";
+  if (lower.includes("audit phase") || lower.includes("adversarial audit") || lower.includes("quality checks")) return "warden";
+  if (lower.includes("review remaining work") || lower.includes("reprioritize") || lower.includes("split this bead") || lower.includes("has failed twice")) return "tower";
+  if (lower.includes("claimbead") || lower.includes("claim bead") || lower.includes("get your assignment")) return "trench";
+  return "trench"; // default
+}
+
 export interface SessionSummary {
   sessionId: string;
   startTime: string;
@@ -41,6 +51,7 @@ interface RawEvent {
   reason?: string;
   message?: string;
   content?: string;
+  instruction?: string;
   totalTokens?: { in: number; out: number };
 }
 
@@ -79,6 +90,9 @@ export function parseSession(filePath: string): SessionSummary {
       case "session_start":
         if (event.sessionId) sessionId = event.sessionId;
         if (event.timestamp) startTime = event.timestamp;
+        if (event.instruction) {
+          role = deriveRole(event.instruction);
+        }
         break;
 
       case "llm_request":

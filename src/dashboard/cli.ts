@@ -79,6 +79,75 @@ try {
   console.log("  Could not generate graph (bv not available)");
 }
 
+// Group graph nodes by phase using bead labels
+if (mermaidGraph && beadData.phases.length > 0) {
+  try {
+    const brOutput = execFileSync("br", ["list", "--json"], {
+      cwd: workspaceDir, timeout: 10_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+    });
+    const allBeads = JSON.parse(brOutput) as Array<{ id: string; labels: string[] | null }>;
+
+    // Build phase → bead IDs mapping
+    const phaseBeads = new Map<string, string[]>();
+    for (const bead of allBeads) {
+      for (const label of bead.labels ?? []) {
+        if (label.startsWith("phase:")) {
+          const list = phaseBeads.get(label) ?? [];
+          list.push(bead.id);
+          phaseBeads.set(label, list);
+        }
+      }
+    }
+
+    // Inject subgraph blocks after the first line (graph TD)
+    const lines = mermaidGraph.split("\n");
+    const header = lines[0] ?? "graph TD";
+    const classLines = lines.filter((l) => l.trim().startsWith("classDef") || l.trim().startsWith("class "));
+    const nodeLines = lines.filter((l) => !l.trim().startsWith("classDef") && !l.trim().startsWith("class ") && l.includes("["));
+    const edgeLines = lines.filter((l) => l.includes("==>"));
+
+    const grouped: string[] = [header, ...classLines.filter((l) => l.includes("classDef"))];
+
+    for (const [phase, ids] of [...phaseBeads.entries()].sort()) {
+      const idSet = new Set(ids);
+      const phaseNodes = nodeLines.filter((l) => {
+        const match = /^\s*(\S+)\[/.exec(l);
+        return match?.[1] ? idSet.has(match[1]) : false;
+      });
+      const phaseClasses = classLines.filter((l) => {
+        const match = /class\s+(\S+)\s/.exec(l);
+        return match?.[1] ? idSet.has(match[1]) : false;
+      });
+      if (phaseNodes.length > 0) {
+        grouped.push(`    subgraph ${phase.replace("phase:", "Phase: ")}`);
+        grouped.push(...phaseNodes.map((l) => "    " + l.trim()));
+        grouped.push(...phaseClasses.map((l) => "    " + l.trim()));
+        grouped.push("    end");
+      }
+    }
+
+    // Add ungrouped nodes
+    const allGroupedIds = new Set([...phaseBeads.values()].flat());
+    const ungrouped = nodeLines.filter((l) => {
+      const match = /^\s*(\S+)\[/.exec(l);
+      return match?.[1] ? !allGroupedIds.has(match[1]) : true;
+    });
+    if (ungrouped.length > 0) {
+      grouped.push(...ungrouped);
+    }
+    const ungroupedClasses = classLines.filter((l) => {
+      const match = /class\s+(\S+)\s/.exec(l);
+      return match?.[1] ? !allGroupedIds.has(match[1]) : true;
+    });
+    grouped.push(...ungroupedClasses);
+
+    grouped.push(...edgeLines);
+    mermaidGraph = grouped.join("\n");
+  } catch {
+    // Fall back to ungrouped graph
+  }
+}
+
 // Generate HTML
 const html = generateDashboard({
   sessions,
