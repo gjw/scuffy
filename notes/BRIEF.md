@@ -407,7 +407,48 @@ These matter for preserving product identity:
 - Team views should help answer "who's doing what this week?"
 - Projects answer "what are we building?" while docs answer "where is that knowledge?"
 
-## 12) Rebuild Guardrails
+## 12) Agent Workflow Guidance
+
+### Documentation structure
+
+ARCHITECTURE.md should stay **high-level and scannable** — system design, directory layout,
+key decisions, and component boundaries. When a topic needs implementation-level detail
+(persistence strategy, frontend routing plan, API contract specifics), create a separate
+doc in `docs/` and link to it from ARCHITECTURE.md as an appendix reference:
+
+```
+## Appendix references
+- [Backend persistence and module boundaries](docs/backend-persistence.md)
+- [Frontend routing and view architecture](docs/frontend-architecture.md)
+```
+
+This keeps ARCHITECTURE.md useful as a quick-reference while preserving detail for agents
+that need it.
+
+### Monorepo imports
+
+This project uses npm workspaces (`api/`, `web/`, `shared/`). Cross-workspace imports
+should use the package name (`@ship/shared`) rather than relative paths. Scout's scaffold
+bead must configure workspace dependencies in each package.json:
+
+```json
+// api/package.json
+{ "dependencies": { "@ship/shared": "*" } }
+// web/package.json
+{ "dependencies": { "@ship/shared": "*" } }
+```
+
+And tsconfig paths if needed for TypeScript resolution. Do NOT use deep relative paths
+like `../../../../shared/src` — they break when files move and are hard to read.
+
+### Bead dependency hygiene
+
+When creating beads with dependencies, only reference bead IDs that were returned by
+previous createBead calls in the same session. Do NOT guess or fabricate bead IDs —
+the tool will reject invalid references. If you need to reference a bead you created
+earlier, use the exact ID string from the tool's response.
+
+## 13) Rebuild Guardrails
 
 When planning the rebuild, preserve these truths:
 - programs are the required organizational root for work
