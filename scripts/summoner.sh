@@ -152,11 +152,15 @@ detect_claimed_bead() {
 # ─── Bead query helpers ────────────────────────────────────────────────────────
 
 bead_count() {
-  cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
+  local out
+  out=$(cd "$WORKDIR" && br list --json --no-auto-flush 2>/dev/null) || { echo "0"; return; }
+  echo "$out" | jq 'length' 2>/dev/null || echo "0"
 }
 
 ready_count() {
-  cd "$WORKDIR" && br ready --json --no-auto-flush 2>/dev/null | jq 'length' 2>/dev/null || echo "0"
+  local out
+  out=$(cd "$WORKDIR" && br ready --json --no-auto-flush 2>/dev/null) || { echo "0"; return; }
+  echo "$out" | jq 'length' 2>/dev/null || echo "0"
 }
 
 closing_phase() {
@@ -311,10 +315,11 @@ while true; do
   TOTAL=$(bead_count)
   READY=$(ready_count)
 
-  # 1. No beads → Scout
+  # 1. No beads → Scout (escalation is expected — Scout has no bead to finish)
   if [ "$TOTAL" = "0" ]; then
     echo "=== No beads found. Running Scout to bootstrap. ==="
-    spawn_role "scout" || handle_exit $?
+    spawn_role "scout" || true
+    echo "=== Scout done. Checking for beads... ==="
     continue
   fi
 
