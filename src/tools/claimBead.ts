@@ -5,7 +5,15 @@ import type { Tool, ToolContext, ToolResult } from "./types.js";
 /** Labels that indicate a bead cannot be completed by a coding agent. */
 const EXCLUDED_LABELS = ["human-only", "blocked"];
 
-const parameters = z.object({});
+const parameters = z.object({
+  beadId: z
+    .string()
+    .optional()
+    .describe(
+      "Force-claim a specific bead by ID. Skips bv/br ranking. " +
+      "Use when the summoner assigns a specific emergency bead.",
+    ),
+});
 
 /** Run a shell command and return { ok, output }. */
 function run(command: string, cwd: string): Promise<{ ok: boolean; output: string }> {
@@ -52,7 +60,7 @@ export const claimBeadTool: Tool<typeof parameters> = {
     "Filters out human-only and stale in_progress beads. " +
     "Returns full bead details. Call this once at session start — do not claim beads via bash.",
   parameters,
-  async execute(_params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
+  async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     // Reject double-claim
     const existing = ctx.getClaimedBeadId();
     if (existing !== null) {
@@ -66,6 +74,53 @@ export const claimBeadTool: Tool<typeof parameters> = {
     const initCheck = await run("br list --json", ctx.workingDir);
     if (!initCheck.ok && initCheck.output.includes("NOT_INITIALIZED")) {
       await run("br init", ctx.workingDir);
+    }
+
+    // Force-claim path: summoner assigned a specific bead (e.g., emergency fix)
+    if (params.beadId) {
+      const claim = await run(`br update ${params.beadId} --claim`, ctx.workingDir);
+      if (!claim.ok) {
+        return { content: `Failed to claim ${params.beadId}: ${claim.output}`, isError: true };
+      }
+      ctx.setClaimedBeadId(params.beadId);
+      ctx.log({
+        type: "bead_claim",
+        timestamp: new Date().toISOString(),
+        beadId: params.beadId,
+        title: "(force-assigned)",
+      });
+      const details = await run(`br show ${params.beadId} --json`, ctx.workingDir);
+
+      // Query CASS for this specific task
+      let cassContext = "";
+      const cassResult = await run(
+        `cm context ${JSON.stringify(params.beadId)} --workspace ${JSON.stringify(ctx.workingDir)} --json 2>/dev/null`,
+        ctx.workingDir,
+      );
+      if (cassResult.ok) {
+        try {
+          const parsed: unknown = JSON.parse(cassResult.output);
+          if (typeof parsed === "object" && parsed !== null && "data" in parsed) {
+            const data = (parsed as Record<string, unknown>)["data"];
+            if (typeof data === "object" && data !== null && "relevantBullets" in data) {
+              const bullets = (data as Record<string, unknown>)["relevantBullets"];
+              if (Array.isArray(bullets) && bullets.length > 0) {
+                const lessons = bullets.slice(0, 3).map((b: unknown) => {
+                  if (typeof b === "object" && b !== null && "content" in b) {
+                    return `- ${String((b as Record<string, unknown>)["content"])}`;
+                  }
+                  return null;
+                }).filter(Boolean).join("\n");
+                if (lessons.length > 0) cassContext = `\n\n## Lessons from prior sessions (CASS)\n\n${lessons}`;
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+
+      return {
+        content: `Claimed bead ${params.beadId} (force-assigned)\n\n${details.ok ? details.output : "(no details available)"}${cassContext}`,
+      };
     }
 
     // Try bv --robot-next first (dependency-aware, graph-ranked)

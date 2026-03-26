@@ -582,11 +582,8 @@ async function main(): Promise<void> {
       let result: SpawnResult;
       if (emergencyId) {
         result = spawnRoleClean("trench",
-          `URGENT: Main has pre-existing typecheck failures that block all agents. ` +
-          `Claim bead ${emergencyId} (do NOT call claimBead — it may pick a different bead). ` +
-          `Instead, run: br update ${emergencyId} --claim, then br show ${emergencyId} --json ` +
-          `to read the description. Fix the typecheck failures, then call finishBead with ` +
-          `beadId="${emergencyId}" and your summary.`);
+          `URGENT: Main has typecheck failures. Call claimBead with beadId="${emergencyId}" ` +
+          `to claim the emergency fix bead. Fix the failures, then call finishBead.`);
       } else {
         result = spawnRoleClean("trench");
       }
