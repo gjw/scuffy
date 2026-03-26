@@ -1,5 +1,3 @@
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
 import { z } from "zod";
 import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
@@ -310,33 +308,53 @@ export const finishBeadTool: Tool<typeof parameters> = {
         })
         .join("\n\n");
 
-      // Create P0 emergency bead
+      // Create P0 emergency bead (only if one doesn't already exist)
       const emergencyTitle = `Fix pre-existing ${failedCheckNames} failures`;
-      const emergencyDesc =
-        `Pre-existing failures detected during finishBead for bead ${params.beadId}.\n\n` +
-        `Failing files: ${failingFilesList}\n\n${errorSummary}\n\n` +
-        `These failures are in files NOT modified by the agent. Fix them to unblock the pipeline.`;
-      const titleEsc = emergencyTitle.replace(/'/g, "'\\''");
-      const descEsc = emergencyDesc.replace(/['\x00-\x1f]/g, (c) =>
-        c === "'" ? "'\\''" : " ",
-      );
+      const beadList = await run("br list --json", ctx.workingDir);
+      let emergencyExists = false;
+      try {
+        const beads: unknown = JSON.parse(beadList.output);
+        if (Array.isArray(beads)) {
+          emergencyExists = beads.some(
+            (b: unknown) =>
+              typeof b === "object" &&
+              b !== null &&
+              "status" in b &&
+              (b as Record<string, unknown>)["status"] !== "closed" &&
+              "title" in b &&
+              typeof (b as Record<string, unknown>)["title"] === "string" &&
+              ((b as Record<string, unknown>)["title"] as string).includes("pre-existing"),
+          );
+        }
+      } catch {
+        // Can't parse — create the bead to be safe
+      }
 
-      await run(
-        `br create --no-auto-flush --title='${titleEsc}' --type=bug --priority=0 --description='${descEsc}'`,
-        ctx.workingDir,
-      );
+      if (!emergencyExists) {
+        const emergencyDesc =
+          `Pre-existing failures detected during finishBead for bead ${params.beadId}.\n\n` +
+          `Failing files: ${failingFilesList}\n\n${errorSummary}\n\n` +
+          `These failures are in files NOT modified by the agent. Fix them to unblock the pipeline.`;
+        const titleEsc = emergencyTitle.replace(/'/g, "'\\''");
+        const descEsc = emergencyDesc.replace(/['\x00-\x1f]/g, (c) =>
+          c === "'" ? "'\\''" : " ",
+        );
 
-      // Pause pipeline
-      await writeFile(
-        path.join(ctx.workingDir, ".pause"),
-        `Pre-existing failures from bead ${params.beadId} at ${new Date().toISOString()}\n`,
-      );
+        await run(
+          `br create --no-auto-flush --title='${titleEsc}' --type=bug --priority=0 --description='${descEsc}'`,
+          ctx.workingDir,
+        );
+      }
+
+      // No pause — the P0 priority ensures the next Trench picks up the
+      // emergency bead first. The summoner health check provides a second
+      // guard. This keeps the pipeline autonomous.
 
       // Notify Chair
       await ctx.notifyHuman(
         `PRE-EXISTING FAILURES bypassed for bead ${params.beadId}. ` +
         `Failing: ${failedCheckNames} in ${failingFilesList}. ` +
-        `Emergency P0 bead created. Pipeline paused.`,
+        `Emergency P0 bead created.`,
       );
 
       await run("br sync --flush-only", ctx.workingDir);
@@ -346,7 +364,7 @@ export const finishBeadTool: Tool<typeof parameters> = {
         content:
           `Bead ${params.beadId} complete (bypass): ${params.summary}\n\n` +
           `WARNING: Pre-existing ${failedCheckNames} failures in ${failingFilesList} bypassed.\n` +
-          `Emergency P0 bead created. Pipeline paused.`,
+          `Emergency P0 bead created. Next Trench will fix it.`,
         metadata: { exit: true, exitCode: 0 },
       };
     }
