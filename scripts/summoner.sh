@@ -137,7 +137,7 @@ spawn_role() {
 extract_bead_id() {
   # Try BUDGET_EXCEEDED format first
   local id
-  id=$(echo "$LAST_OUTPUT" | grep -o 'BUDGET_EXCEEDED bead=[^ ]*' | sed 's/BUDGET_EXCEEDED bead=//' | head -1)
+  id=$(echo "$LAST_OUTPUT" | grep -o 'BUDGET_EXCEEDED bead=[^ ]*' | sed 's/BUDGET_EXCEEDED bead=//' | head -1 || true)
   if [ -n "$id" ] && [ "$id" != "unknown" ]; then
     echo "$id"
     return
@@ -148,7 +148,7 @@ extract_bead_id() {
 
 # Try to detect which bead was claimed from session output
 detect_claimed_bead() {
-  LAST_BEAD_ID=$(echo "$LAST_OUTPUT" | grep -o 'Claimed bead [^ :]*' | sed 's/Claimed bead //' | head -1)
+  LAST_BEAD_ID=$(echo "$LAST_OUTPUT" | grep -o 'Claimed bead [^ :]*' | sed 's/Claimed bead //' | head -1 || true)
 }
 
 # ─── Bead query helpers ────────────────────────────────────────────────────────
@@ -302,6 +302,7 @@ handle_exit() {
 # ─── Main loop ───────────────────────────────────────────────────────────────
 
 echo "Summoner started — workspace: $WORKDIR"
+mkdir -p "$WORKDIR/.scuffy"
 echo ""
 
 while true; do
