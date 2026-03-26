@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
 /** Labels that indicate a bead cannot be completed by a coding agent. */
-const EXCLUDED_LABELS = ["human-only"];
+const EXCLUDED_LABELS = ["human-only", "blocked"];
 
 const parameters = z.object({});
 

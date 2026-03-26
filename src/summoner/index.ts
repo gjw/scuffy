@@ -163,6 +163,11 @@ function recoverStaleBeads(): void {
   const beads = listBeads();
   for (const bead of beads) {
     if (bead.status === "in_progress") {
+      // Don't recover beads that were halted (labeled "blocked")
+      const labels = bead.labels ?? [];
+      if (labels.includes("blocked")) {
+        continue;
+      }
       console.log(`=== Recovering stale bead: ${bead.id} ===`);
       br(`update ${bead.id} --status=open --no-auto-flush`);
     }
