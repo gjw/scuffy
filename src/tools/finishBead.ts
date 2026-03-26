@@ -146,21 +146,34 @@ export const finishBeadTool: Tool<typeof parameters> = {
     let bypassFailingFiles = new Set<string>();
 
     if (failures.length > 0) {
-      const changedFiles = await getAgentChangedFiles(ctx.workingDir);
+      // Gold-standard fault detection: run the same checks on the parent commit.
+      // If the parent also fails the same checks, the failures are truly pre-existing.
+      // If the parent passes, the agent's changes caused the failures (even transitively).
+      const failedCheckNames = failures.map((f) => f.check);
+      let parentAlsoFails = false;
 
-      // Extract all files mentioned in failure output
-      const allFailingFiles = new Set<string>();
-      for (const f of failures) {
-        for (const file of extractFailingFiles(f.output, ctx.workingDir)) {
-          allFailingFiles.add(file);
+      const stash = await run("git stash --include-untracked", ctx.workingDir);
+      if (stash.ok) {
+        // Run failing checks on the clean parent
+        let parentFailed = false;
+        for (const check of failedCheckNames) {
+          const parentResult = await run(`npm run ${check}`, ctx.workingDir);
+          if (!parentResult.ok) {
+            parentFailed = true;
+            // Collect failing files from parent for the emergency bead description
+            for (const file of extractFailingFiles(parentResult.output, ctx.workingDir)) {
+              bypassFailingFiles.add(file);
+            }
+          }
         }
+        parentAlsoFails = parentFailed;
+
+        // Restore agent's changes
+        await run("git stash pop", ctx.workingDir);
       }
 
-      // Check if any failing file was modified by the agent
-      const agentFaultFiles = [...allFailingFiles].filter((f) => changedFiles.has(f));
-
-      if (agentFaultFiles.length > 0 || allFailingFiles.size === 0) {
-        // Agent's fault, or can't determine failing files → conservative rejection
+      if (!parentAlsoFails) {
+        // Agent's fault — parent was clean, agent's changes broke it (directly or transitively)
         const firstFailure = failures[0];
         if (firstFailure) {
           return {
@@ -171,16 +184,16 @@ export const finishBeadTool: Tool<typeof parameters> = {
         return { content: "Quality checks failed.", isError: true };
       }
 
-      // NOT agent's fault — all failures are in files the agent didn't touch
+      // Truly pre-existing — parent commit has the same failures
       isBypass = true;
-      bypassFailingFiles = allFailingFiles;
 
+      const changedFiles = await getAgentChangedFiles(ctx.workingDir);
       ctx.log({
         type: "preexisting_bypass",
         timestamp: new Date().toISOString(),
         beadId: params.beadId,
-        failedChecks: failures.map((f) => f.check),
-        failingFiles: [...allFailingFiles],
+        failedChecks: failedCheckNames,
+        failingFiles: [...bypassFailingFiles],
         agentChangedFiles: [...changedFiles],
       });
     }
