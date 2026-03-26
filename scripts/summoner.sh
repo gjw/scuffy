@@ -28,9 +28,23 @@ set -euo pipefail
 SCUFFY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKDIR="$(cd "$SCUFFY_ROOT" && cd "${1:-workspace/ship-rebuild}" && pwd)"
 PAUSE_ON_ESCALATE="${SUMMONER_PAUSE_ON_ESCALATE:-0}"
+MAIL_URL="${AGENT_MAIL_URL:-http://127.0.0.1:8765/mcp}"
+PROJECT_KEY="$SCUFFY_ROOT"
 LAST_OUTPUT=""
 ATTEMPTS_FILE="$WORKDIR/.summoner-attempts"
 LAST_BEAD_ID=""
+
+# ─── Notify Chair via agent mail ───────────────────────────────────────────────
+
+notify_chair() {
+  local subject="$1"
+  local body="$2"
+  local payload
+  payload=$(printf '{"jsonrpc":"2.0","id":"notify","method":"tools/call","params":{"name":"send_message","arguments":{"project_key":"%s","from_agent":"RedTrench","to_agent":"HumanOverseer","subject":"%s","body":"%s","priority":"high"}}}' "$PROJECT_KEY" "$subject" "$body")
+  curl -sS --max-time 5 -X POST "$MAIL_URL" \
+    -H "content-type: application/json" \
+    -d "$payload" >/dev/null 2>&1 || true
+}
 
 # ─── Attempt tracking ─────────────────────────────────────────────────────────
 
@@ -217,6 +231,7 @@ drain_warden_beads() {
 split_bead() {
   local bead_id="$1"
   echo "=== Budget exceeded on $bead_id. Invoking Tower to split. ==="
+  notify_chair "Budget exceeded: $bead_id" "Bead $bead_id hit token budget. Invoking Tower to split."
   (cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null) || true
   spawn_role "tower" "Bead $bead_id exceeded the token budget and could not complete in one session. Read the bead description with br show $bead_id. Examine any partial work on disk. Use the createBead tool to split this bead into 2-3 smaller beads. Then use the closeBead tool to close the original. Call escalate when done." || true
 }
@@ -224,6 +239,7 @@ split_bead() {
 tower_review_bead() {
   local bead_id="$1"
   echo "=== Bead $bead_id failed twice. Invoking Tower to review. ==="
+  notify_chair "Repeated failure: $bead_id" "Bead $bead_id failed twice. Invoking Tower to review."
   (cd "$WORKDIR" && br update "$bead_id" --status=open --no-auto-flush 2>/dev/null) || true
   spawn_role "tower" "Bead $bead_id has failed twice. Trench could not complete it. Read the bead description with br show $bead_id and examine the codebase. Is the description wrong? Is it too big? Does it conflict with existing code? Either: (1) use createBead to split it into smaller beads and closeBead to close the original, (2) update the description if it's wrong, or (3) closeBead it if it's no longer needed. Call escalate when done." || true
 }
@@ -231,6 +247,7 @@ tower_review_bead() {
 halt_bead() {
   local bead_id="$1"
   echo "=== Bead $bead_id failed 3 times. Halting. ==="
+  notify_chair "HALTED: $bead_id" "Bead $bead_id failed 3 times and has been halted. Manual intervention needed."
   (cd "$WORKDIR" && br update "$bead_id" --labels=blocked --no-auto-flush 2>/dev/null) || true
   # TODO: send mail to Chair when agent mail is connected
 }
@@ -337,8 +354,10 @@ while true; do
 
   # 3. Ready beads → Trench
   if [ "$READY" -gt 0 ]; then
+    set +e
     spawn_role "trench"
     TRENCH_EXIT=$?
+    set -e
     echo "=== Trench exited with code $TRENCH_EXIT ==="
     handle_exit "$TRENCH_EXIT"
     echo "=== handle_exit returned, continuing loop ==="
