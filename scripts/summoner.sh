@@ -336,7 +336,10 @@ while true; do
   # 3. Ready beads → Trench
   if [ "$READY" -gt 0 ]; then
     spawn_role "trench"
-    handle_exit $?
+    TRENCH_EXIT=$?
+    echo "=== Trench exited with code $TRENCH_EXIT ==="
+    handle_exit "$TRENCH_EXIT"
+    echo "=== handle_exit returned, continuing loop ==="
     continue
   fi
 
