@@ -109,6 +109,93 @@ function notifyChair(subject: string, body: string): void {
   }
 }
 
+// ─── Git state management ────────────────────────────────────────────────────
+
+/**
+ * Ensure the working directory is on main with clean bead state before the
+ * next spawn. Commits any stragglers, checks out main, syncs bead JSONL.
+ *
+ * Called at the top of the main loop — NOT before Tower interventions, because
+ * Tower needs to see WIP on the branch after budget exceeded.
+ */
+function resetToMain(): void {
+  try {
+    const branch = execFileSync("git", ["branch", "--show-current"], {
+      cwd: WORKDIR,
+      timeout: 5_000,
+      encoding: "utf-8",
+    }).trim();
+
+    if (!branch || branch === "main") {
+      // Already on main — just sync bead state
+      syncBeadState();
+      return;
+    }
+
+    // Safety commit: catch anything headless.ts or escalate missed
+    const status = execFileSync("git", ["status", "--porcelain"], {
+      cwd: WORKDIR,
+      timeout: 5_000,
+      encoding: "utf-8",
+    }).trim();
+    if (status.length > 0) {
+      execFileSync(
+        "/bin/sh",
+        ["-c", `git add -A && git commit -m "WIP: summoner safety commit before returning to main" --no-verify`],
+        { cwd: WORKDIR, timeout: 10_000, stdio: "pipe" },
+      );
+      console.log(`  [safety commit on ${branch}]`);
+    }
+
+    // Checkout main
+    execFileSync("git", ["checkout", "main"], {
+      cwd: WORKDIR,
+      timeout: 10_000,
+      stdio: "pipe",
+    });
+    console.log(`=== Reset to main from ${branch} ===`);
+
+    // Sync bead state (SQLite → JSONL on main)
+    syncBeadState();
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`resetToMain failed: ${msg}`);
+    // Last resort: force checkout main (may discard uncommitted changes)
+    try {
+      execFileSync("git", ["checkout", "-f", "main"], {
+        cwd: WORKDIR,
+        timeout: 10_000,
+        stdio: "pipe",
+      });
+      console.log("=== Force-reset to main ===");
+      syncBeadState();
+    } catch {
+      console.error("CRITICAL: Cannot checkout main. Next session may inherit dirty state.");
+    }
+  }
+}
+
+/** Flush bead SQLite DB to git-tracked JSONL and commit if changed. */
+function syncBeadState(): void {
+  try {
+    br("sync --flush-only");
+    const beadStatus = execFileSync("git", ["status", "--porcelain", ".beads/"], {
+      cwd: WORKDIR,
+      timeout: 5_000,
+      encoding: "utf-8",
+    }).trim();
+    if (beadStatus.length > 0) {
+      execFileSync(
+        "/bin/sh",
+        ["-c", `git add .beads/ && git commit -m "Sync bead state"`],
+        { cwd: WORKDIR, timeout: 10_000, stdio: "pipe" },
+      );
+    }
+  } catch {
+    // Non-fatal: bead JSONL may be slightly stale but SQLite is authoritative
+  }
+}
+
 // ─── Spawning ────────────────────────────────────────────────────────────────
 
 interface SpawnResult {
@@ -313,6 +400,9 @@ async function main(): Promise<void> {
   mkdirSync(path.join(WORKDIR, ".scuffy"), { recursive: true });
 
   for (;;) {
+    // Ensure clean starting state: return to main, sync bead state
+    resetToMain();
+
     // Brake check
     if (existsSync(PAUSE_FILE)) {
       console.log(`Paused. Remove ${PAUSE_FILE} to resume.`);
