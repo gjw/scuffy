@@ -233,11 +233,7 @@ Zod schemas are the source of truth for shared types.
 
 ## Startup (do these first, in order)
 
-1. **Create your branch** — do NOT commit to main:
-
-   ```bash
-   git checkout -b task/<id>-<slug>    # e.g. task/abc1-audio-engine
-   ```
+1. **Work on main.** Commit directly to main. Do NOT create task branches.
 
 2. **Claim the issue:**
 
