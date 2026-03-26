@@ -99,6 +99,15 @@ export type TestAuditEvent = {
   result: "clean" | "unreported_changes" | "deleted_tests";
 };
 
+export type PreexistingBypassEvent = {
+  type: "preexisting_bypass";
+  timestamp: string;
+  beadId: string;
+  failedChecks: string[];
+  failingFiles: string[];
+  agentChangedFiles: string[];
+};
+
 export type LogEvent =
   | SessionStartEvent
   | UserInstructionEvent
@@ -110,4 +119,5 @@ export type LogEvent =
   | BeadClaimEvent
   | BeadCompleteEvent
   | EscalationEvent
-  | TestAuditEvent;
+  | TestAuditEvent
+  | PreexistingBypassEvent;

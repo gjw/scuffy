@@ -393,6 +393,64 @@ function handleExit(result: SpawnResult): void {
   }
 }
 
+// ─── Main health check ───────────────────────────────────────────────────────
+
+/**
+ * Run a quick typecheck on main before spawning Trench. If main is broken,
+ * ensure a P0 emergency fix bead exists so Trench fixes it first instead of
+ * wasting a whole session on unrelated work only to hit the same failures.
+ *
+ * Returns true if main is healthy (or we created an emergency bead).
+ * Returns false only if we couldn't determine state.
+ */
+function ensureMainHealth(): void {
+  console.log("=== Checking main health (typecheck) ===");
+  try {
+    execFileSync("/bin/sh", ["-c", "npm run typecheck"], {
+      cwd: WORKDIR,
+      timeout: 120_000,
+      stdio: "pipe",
+    });
+    console.log("  Main is healthy.");
+  } catch (err: unknown) {
+    console.log("  Main has typecheck failures.");
+
+    // Check if an emergency fix bead already exists
+    const beads = listBeads();
+    const hasEmergency = beads.some(
+      (b) =>
+        b.status !== "closed" &&
+        (b.title.includes("pre-existing") || b.title.includes("Pre-existing")),
+    );
+
+    if (hasEmergency) {
+      console.log("  Emergency fix bead already exists. Trench will pick it up.");
+      return;
+    }
+
+    // Extract error summary from stderr/stdout
+    const rawOutput =
+      (err as { stdout?: Buffer | string }).stdout?.toString() ??
+      (err as { stderr?: Buffer | string }).stderr?.toString() ??
+      "typecheck failed";
+    const summary = rawOutput.slice(0, 800).replace(/['\x00-\x1f]/g, (c: string) =>
+      c === "\n" ? "\n" : " ",
+    );
+
+    console.log("  Creating P0 emergency fix bead.");
+    br(
+      `create --no-auto-flush --title='Fix pre-existing typecheck failures on main' ` +
+      `--type=bug --priority=0 --description='Typecheck fails on main. This blocks all Trench agents.\n\n${summary.replace(/'/g, "'\\''")}'`,
+    );
+    br("sync --flush-only");
+
+    notifyChair(
+      "Main health check failed",
+      "Typecheck fails on main. Created P0 emergency bead. Next Trench will attempt fix.",
+    );
+  }
+}
+
 // ─── Main loop ───────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -435,6 +493,9 @@ async function main(): Promise<void> {
 
     // 3. Ready beads → Trench
     if (ready.length > 0) {
+      // Health check: ensure main is clean before wasting a session
+      ensureMainHealth();
+
       const result = spawnRoleClean("trench");
       handleExit(result);
       continue;

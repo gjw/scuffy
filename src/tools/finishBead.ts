@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
 import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
@@ -43,6 +45,82 @@ function isTestFile(filename: string): boolean {
   return TEST_FILE_PATTERNS.some((pattern) => filename.endsWith(pattern));
 }
 
+// ---------------------------------------------------------------------------
+// Pre-existing failure detection
+// ---------------------------------------------------------------------------
+
+interface CheckFailure {
+  check: string;
+  output: string;
+}
+
+/** Strip ANSI escape codes from command output. */
+function stripAnsi(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
+/**
+ * Extract file paths from check output. Handles tsc, eslint, and vitest formats.
+ * Returns relative paths (strips workingDir prefix from absolute paths).
+ */
+function extractFailingFiles(output: string, workingDir: string): Set<string> {
+  const files = new Set<string>();
+  const clean = stripAnsi(output);
+
+  for (const line of clean.split("\n")) {
+    // tsc format: src/file.ts(10,5): error TS...
+    const tscMatch = /^(\S+\.tsx?)\(\d+,\d+\):/.exec(line);
+    if (tscMatch?.[1]) {
+      files.add(tscMatch[1]);
+      continue;
+    }
+
+    // eslint format: /absolute/path/to/file.ts (standalone line)
+    const trimmed = line.trim();
+    if (/^\/\S+\.tsx?$/.test(trimmed)) {
+      const prefix = workingDir + "/";
+      files.add(trimmed.startsWith(prefix) ? trimmed.slice(prefix.length) : trimmed);
+      continue;
+    }
+
+    // vitest format: ❯ src/file.test.ts > ... or FAIL src/file.test.ts
+    const vitestMatch = /(?:FAIL|❯)\s+(\S+\.tsx?)/.exec(line);
+    if (vitestMatch?.[1]) {
+      files.add(vitestMatch[1]);
+      continue;
+    }
+  }
+
+  return files;
+}
+
+/** Get all files the agent has changed (modified, added, deleted, untracked). */
+async function getAgentChangedFiles(workingDir: string): Promise<Set<string>> {
+  const files = new Set<string>();
+
+  // Tracked changes (modified, added, deleted) vs HEAD
+  const diff = await run("git diff --name-only HEAD 2>/dev/null || true", workingDir);
+  for (const f of diff.output.split("\n")) {
+    if (f.length > 0) files.add(f);
+  }
+
+  // Untracked new files
+  const untracked = await run(
+    "git ls-files --others --exclude-standard 2>/dev/null || true",
+    workingDir,
+  );
+  for (const f of untracked.output.split("\n")) {
+    if (f.length > 0) files.add(f);
+  }
+
+  return files;
+}
+
+// ---------------------------------------------------------------------------
+// Tool definition
+// ---------------------------------------------------------------------------
+
 export const finishBeadTool: Tool<typeof parameters> = {
   name: "finishBead",
   description:
@@ -56,18 +134,60 @@ export const finishBeadTool: Tool<typeof parameters> = {
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     const checks = params.checks ?? ["typecheck", "lint"];
 
-    // Run quality checks sequentially — fail fast
+    // ── Run all quality checks, collect failures ──
+    const failures: CheckFailure[] = [];
     for (const check of checks) {
       const result = await run(`npm run ${check}`, ctx.workingDir);
       if (!result.ok) {
-        return {
-          content: `Check failed: npm run ${check}\n\n${result.output}`,
-          isError: true,
-        };
+        failures.push({ check, output: result.output });
       }
     }
 
-    // --- Test change audit ---
+    // ── Determine fault if checks failed ──
+    let isBypass = false;
+    let bypassFailingFiles = new Set<string>();
+
+    if (failures.length > 0) {
+      const changedFiles = await getAgentChangedFiles(ctx.workingDir);
+
+      // Extract all files mentioned in failure output
+      const allFailingFiles = new Set<string>();
+      for (const f of failures) {
+        for (const file of extractFailingFiles(f.output, ctx.workingDir)) {
+          allFailingFiles.add(file);
+        }
+      }
+
+      // Check if any failing file was modified by the agent
+      const agentFaultFiles = [...allFailingFiles].filter((f) => changedFiles.has(f));
+
+      if (agentFaultFiles.length > 0 || allFailingFiles.size === 0) {
+        // Agent's fault, or can't determine failing files → conservative rejection
+        const firstFailure = failures[0];
+        if (firstFailure) {
+          return {
+            content: `Check failed: npm run ${firstFailure.check}\n\n${firstFailure.output}`,
+            isError: true,
+          };
+        }
+        return { content: "Quality checks failed.", isError: true };
+      }
+
+      // NOT agent's fault — all failures are in files the agent didn't touch
+      isBypass = true;
+      bypassFailingFiles = allFailingFiles;
+
+      ctx.log({
+        type: "preexisting_bypass",
+        timestamp: new Date().toISOString(),
+        beadId: params.beadId,
+        failedChecks: failures.map((f) => f.check),
+        failingFiles: [...allFailingFiles],
+        agentChangedFiles: [...changedFiles],
+      });
+    }
+
+    // ── Test change audit (shared: normal + bypass paths) ──
 
     // Detect deleted test files
     const deletedResult = await run(
@@ -127,12 +247,12 @@ export const finishBeadTool: Tool<typeof parameters> = {
       result: "clean",
     });
 
-    // --- End test change audit ---
+    // ── Commit (shared: normal + bypass) ──
 
-    // Commit if there are uncommitted changes
     const status = await run("git status --porcelain", ctx.workingDir);
     if (status.output.length > 0) {
-      const commitMsg = `${params.summary} (${params.beadId})`;
+      const suffix = isBypass ? " [bypass: pre-existing failures]" : "";
+      const commitMsg = `${params.summary} (${params.beadId})${suffix}`;
       const commit = await run(
         `git add -A && git commit -m ${JSON.stringify(commitMsg)}`,
         ctx.workingDir,
@@ -142,7 +262,8 @@ export const finishBeadTool: Tool<typeof parameters> = {
       }
     }
 
-    // Merge task branch to main (keeps main up to date with passing code)
+    // ── Merge to main (shared) ──
+
     const currentBranch = await run("git branch --show-current", ctx.workingDir);
     const branchName = currentBranch.output.trim();
     if (branchName && branchName !== "main") {
@@ -151,7 +272,6 @@ export const finishBeadTool: Tool<typeof parameters> = {
         ctx.workingDir,
       );
       if (!merge.ok) {
-        // Non-fatal — log but don't block completion
         ctx.log({
           type: "escalation",
           timestamp: new Date().toISOString(),
@@ -161,7 +281,8 @@ export const finishBeadTool: Tool<typeof parameters> = {
       }
     }
 
-    // Close the bead
+    // ── Close the bead (shared) ──
+
     const close = await run(
       `br close ${params.beadId} --reason ${JSON.stringify(params.summary)}`,
       ctx.workingDir,
@@ -170,7 +291,6 @@ export const finishBeadTool: Tool<typeof parameters> = {
       return { content: `br close failed:\n\n${close.output}`, isError: true };
     }
 
-    // Log completion event
     ctx.log({
       type: "bead_complete",
       timestamp: new Date().toISOString(),
@@ -178,7 +298,61 @@ export const finishBeadTool: Tool<typeof parameters> = {
       summary: params.summary,
     });
 
-    // Build completion message with audit summary
+    // ── Bypass: create emergency bead and pause pipeline ──
+
+    if (isBypass) {
+      const failedCheckNames = failures.map((f) => f.check).join(", ");
+      const failingFilesList = [...bypassFailingFiles].slice(0, 10).join(", ");
+      const errorSummary = failures
+        .map((f) => {
+          const clean = stripAnsi(f.output).slice(0, 500);
+          return `${f.check}:\n${clean}`;
+        })
+        .join("\n\n");
+
+      // Create P0 emergency bead
+      const emergencyTitle = `Fix pre-existing ${failedCheckNames} failures`;
+      const emergencyDesc =
+        `Pre-existing failures detected during finishBead for bead ${params.beadId}.\n\n` +
+        `Failing files: ${failingFilesList}\n\n${errorSummary}\n\n` +
+        `These failures are in files NOT modified by the agent. Fix them to unblock the pipeline.`;
+      const titleEsc = emergencyTitle.replace(/'/g, "'\\''");
+      const descEsc = emergencyDesc.replace(/['\x00-\x1f]/g, (c) =>
+        c === "'" ? "'\\''" : " ",
+      );
+
+      await run(
+        `br create --no-auto-flush --title='${titleEsc}' --type=bug --priority=0 --description='${descEsc}'`,
+        ctx.workingDir,
+      );
+
+      // Pause pipeline
+      await writeFile(
+        path.join(ctx.workingDir, ".pause"),
+        `Pre-existing failures from bead ${params.beadId} at ${new Date().toISOString()}\n`,
+      );
+
+      // Notify Chair
+      await ctx.notifyHuman(
+        `PRE-EXISTING FAILURES bypassed for bead ${params.beadId}. ` +
+        `Failing: ${failedCheckNames} in ${failingFilesList}. ` +
+        `Emergency P0 bead created. Pipeline paused.`,
+      );
+
+      await run("br sync --flush-only", ctx.workingDir);
+      await ctx.recordOutcome("success", `${params.summary} (bypassed pre-existing failures)`);
+
+      return {
+        content:
+          `Bead ${params.beadId} complete (bypass): ${params.summary}\n\n` +
+          `WARNING: Pre-existing ${failedCheckNames} failures in ${failingFilesList} bypassed.\n` +
+          `Emergency P0 bead created. Pipeline paused.`,
+        metadata: { exit: true, exitCode: 0 },
+      };
+    }
+
+    // ── Normal completion ──
+
     const auditNote =
       actualTestChanges.length > 0
         ? `\nTest audit: ${String(actualTestChanges.length)} test file(s) changed, all reported.` +
@@ -187,10 +361,7 @@ export const finishBeadTool: Tool<typeof parameters> = {
             : "")
         : "";
 
-    // Flush beads to JSONL (single export per session, not per operation)
     await run("br sync --flush-only", ctx.workingDir);
-
-    // Record success outcome to CASS memory
     await ctx.recordOutcome("success", params.summary);
 
     return {
