@@ -83,8 +83,33 @@ br reimports from the JSONL file, which is the durable source of truth.
 - `claim-error.txt` — the exact error from br update --claim
 - `header-analysis.txt` — parsed SQLite header showing corruption
 
+## Third occurrence (2026-03-26, evening)
+
+Same error recurred during a fresh rebuild run (~30+ bead completions, ~15 Tower
+splits, many emergency fix cycles over ~2 hours). The DB worked fine for the first
+~25 beads then started failing on `br update --claim` with the identical
+"cursor must be on a leaf to delete" error.
+
+Additional findings:
+- `br sync` (JSONL → SQLite reimport) also fails on the corrupted DB with
+  "malformed SQLite record blob" — simply deleting the DB isn't enough if
+  the JSONL was flushed from a corrupted state
+- The JSONL itself is valid JSON (all 111 lines parse correctly) but `br sync`
+  chokes during SQLite import, suggesting the issue is in br's import logic
+  when handling certain record combinations
+- **Workaround that worked:** restore JSONL from git (`git checkout <commit> -- .beads/issues.jsonl`)
+  to a version before the corruption was flushed, then `br sync` succeeds
+- The JSONL from the same commit (7123a2f) that was on disk at corruption time
+  happened to also work — the corruption may be non-deterministic or triggered
+  by specific DB state rather than specific JSONL content
+
+This is now the **third** occurrence across two build runs. The pattern is
+consistent: works fine for 15-25 beads, then write operations fail. This
+strongly suggests accumulated B-tree damage from many rapid write cycles
+rather than a one-time corruption event.
+
 ## Status
 
-Not yet reported upstream to beads_rust. This is the second instance of
-DB corruption (see BUG-001). Both show the same header pattern: db_size_pages=1,
-change_counter=0 on a multi-page file.
+Not yet reported upstream to beads_rust. Three instances of DB corruption
+observed (BUG-001, BUG-002, and the third occurrence above). All show the
+same failure pattern. Current mitigation: restore JSONL from git and rebuild.
