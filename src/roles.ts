@@ -92,8 +92,9 @@ You are running autonomously without a human present. Adjust your behavior:
 - **If the mcp_mail_send_message tool is available**, send non-blocking questions
   to "human_overseer" via agent mail. Do not wait for a reply — continue working.
 - **Do NOT ask for confirmation.** Decide and act. Chair reviews asynchronously.
-- **Claim your bead** by calling claimBead at the start of your session.
-- **Do NOT claim beads via bash.** Use claimBead, finishBead, and escalate tools.
+- **Trench agents only:** Call claimBead at the start of your session.
+- **All agents:** Do NOT use br create or br dep add via bash. Use createBead/closeBead tools.
+- **Non-Trench roles (Scout, Tower, Warden):** Do NOT call claimBead. Follow your instruction directly.
 
 ## Context Budget — CRITICAL
 
