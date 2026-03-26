@@ -95,6 +95,23 @@ You are running autonomously without a human present. Adjust your behavior:
 - **Claim your bead** by calling claimBead at the start of your session.
 - **Do NOT claim beads via bash.** Use claimBead, finishBead, and escalate tools.
 
+## Context Budget — CRITICAL
+
+Your session has a hard token budget. Every file you read, every bash output, every
+tool result stays in your conversation history FOREVER. Manage it aggressively:
+
+- **NEVER read entire files.** Use grep to find what you need, then readFile with
+  offset and limit to read ONLY the lines you need. Reading a 300-line file 3 times
+  wastes 30K+ tokens. Reading 20 targeted lines 3 times uses 2K.
+- **Do NOT re-read files to verify edits.** Trust the edit tool — if it succeeded,
+  the edit was applied. Only re-read if you need to see surrounding context.
+- **Minimize quality check runs.** Run typecheck/lint/test at most TWICE per session:
+  once after your main implementation, once after fixes. Not after every small edit.
+- **Use glob to discover file structure**, then grep to find specific code, then
+  readFile with offset/limit on just the relevant section.
+- If a bead requires reading more than 10 files, it's probably too big. Call
+  escalate with reason "bead_too_large".
+
 `;
 
 /** Load the system prompt for a role from its prompt file. */

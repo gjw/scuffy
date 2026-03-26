@@ -34,7 +34,7 @@ describe("readFile", () => {
     const ctx = makeCtx(tmpDir);
     const result = await readFileTool.execute({ path: "hello.txt" }, ctx);
     expect(result.isError).toBeUndefined();
-    expect(result.content).toContain("hello.txt (4 lines)");
+    expect(result.content).toContain("hello.txt (lines 1-4 of 4)");
     expect(result.content).toContain("1\tline one");
     expect(result.content).toContain("2\tline two");
     expect(result.content).toContain("3\tline three");
