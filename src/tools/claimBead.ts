@@ -150,8 +150,47 @@ export const claimBeadTool: Tool<typeof parameters> = {
     // Get full details for the agent
     const details = await run(`br show ${pickId} --json`, ctx.workingDir);
 
+    // Query CASS for relevant lessons from prior sessions
+    let cassContext = "";
+    const cassResult = await run(
+      `cm context ${JSON.stringify(pickTitle)} --workspace ${JSON.stringify(ctx.workingDir)} --json 2>/dev/null`,
+      ctx.workingDir,
+    );
+    if (cassResult.ok && cassResult.output.trim().length > 0) {
+      try {
+        const parsed: unknown = JSON.parse(cassResult.output);
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          "data" in parsed
+        ) {
+          const data = (parsed as Record<string, unknown>)["data"];
+          if (typeof data === "object" && data !== null && "relevantBullets" in data) {
+            const bullets = (data as Record<string, unknown>)["relevantBullets"];
+            if (Array.isArray(bullets) && bullets.length > 0) {
+              const lessons = bullets
+                .slice(0, 5)
+                .map((b: unknown) => {
+                  if (typeof b === "object" && b !== null && "content" in b) {
+                    return `- ${String((b as Record<string, unknown>)["content"])}`;
+                  }
+                  return null;
+                })
+                .filter(Boolean)
+                .join("\n");
+              if (lessons.length > 0) {
+                cassContext = `\n\n## Lessons from prior sessions (CASS)\n\n${lessons}`;
+              }
+            }
+          }
+        }
+      } catch {
+        // CASS parse failed — continue without it
+      }
+    }
+
     return {
-      content: `Claimed bead ${pickId}: ${pickTitle}\n\n${details.ok ? details.output : "(no details available)"}`,
+      content: `Claimed bead ${pickId}: ${pickTitle}\n\n${details.ok ? details.output : "(no details available)"}${cassContext}`,
     };
   },
 };

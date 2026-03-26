@@ -34,7 +34,11 @@ export const escalateTool: Tool<typeof parameters> = {
     // Notify human overseer via agent mail
     await ctx.notifyHuman(`ESCALATION (${params.reason}): ${params.message}`);
 
-    // Record failure outcome to CASS memory
+    // Record failure outcome to CASS
+    await run(
+      `cm outcome failure "" --text ${JSON.stringify(`${params.reason}: ${params.message}`)} 2>/dev/null`,
+      ctx.workingDir,
+    );
     await ctx.recordOutcome("failure", `${params.reason}: ${params.message}`);
 
     // Flush beads to JSONL (single export per session)

@@ -358,6 +358,10 @@ export const finishBeadTool: Tool<typeof parameters> = {
       );
 
       await run("br sync --flush-only", ctx.workingDir);
+      await run(
+        `cm outcome success "" --text ${JSON.stringify(`${params.summary} (bypass: pre-existing failures)`)} 2>/dev/null`,
+        ctx.workingDir,
+      );
       await ctx.recordOutcome("success", `${params.summary} (bypassed pre-existing failures)`);
 
       return {
@@ -380,6 +384,10 @@ export const finishBeadTool: Tool<typeof parameters> = {
         : "";
 
     await run("br sync --flush-only", ctx.workingDir);
+    await run(
+      `cm outcome success "" --text ${JSON.stringify(params.summary)} 2>/dev/null`,
+      ctx.workingDir,
+    );
     await ctx.recordOutcome("success", params.summary);
 
     return {
