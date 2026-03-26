@@ -72,5 +72,25 @@ export async function runHeadless(
   });
   logger.close();
 
+  // Commit WIP on non-zero exit (budget exceeded, escalation without escalate tool).
+  // Escalate tool already commits, but budget guard and crashes don't.
+  // Without this, dirty uncommitted files contaminate the next session.
+  if (result.exitCode && result.exitCode !== 0) {
+    try {
+      const { execFileSync } = await import("node:child_process");
+      const status = execFileSync("git", ["status", "--porcelain"], {
+        cwd: config.workingDir, encoding: "utf-8", timeout: 10_000,
+      }).trim();
+      if (status.length > 0) {
+        const msg = `WIP: session ended with exit ${String(result.exitCode)}`;
+        execFileSync("git", ["add", "-A"], { cwd: config.workingDir, timeout: 10_000 });
+        execFileSync("git", ["commit", "-m", msg, "--no-verify"], { cwd: config.workingDir, timeout: 10_000 });
+        console.log(`[committed WIP: ${msg}]`);
+      }
+    } catch {
+      // Git commit failed — nothing we can do, move on
+    }
+  }
+
   process.exit(result.exitCode ?? 0);
 }
