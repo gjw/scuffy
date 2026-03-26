@@ -471,13 +471,12 @@ function handleExit(result: SpawnResult): void {
 
 /**
  * Run a quick typecheck on main before spawning Trench. If main is broken,
- * ensure a P0 emergency fix bead exists so Trench fixes it first instead of
- * wasting a whole session on unrelated work only to hit the same failures.
+ * ensure a P0 emergency fix bead exists and return its ID so the summoner
+ * can force-assign it to the next Trench.
  *
- * Returns true if main is healthy (or we created an emergency bead).
- * Returns false only if we couldn't determine state.
+ * Returns the emergency bead ID if main is broken, null if healthy.
  */
-function ensureMainHealth(): void {
+function ensureMainHealth(): string | null {
   console.log("=== Checking main health (typecheck) ===");
   try {
     execFileSync("/bin/sh", ["-c", "npm run typecheck"], {
@@ -486,20 +485,21 @@ function ensureMainHealth(): void {
       stdio: "pipe",
     });
     console.log("  Main is healthy.");
+    return null;
   } catch (err: unknown) {
     console.log("  Main has typecheck failures.");
 
     // Check if an emergency fix bead already exists
     const beads = listBeads();
-    const hasEmergency = beads.some(
+    const emergency = beads.find(
       (b) =>
         b.status !== "closed" &&
         (b.title.includes("pre-existing") || b.title.includes("Pre-existing")),
     );
 
-    if (hasEmergency) {
-      console.log("  Emergency fix bead already exists. Trench will pick it up.");
-      return;
+    if (emergency) {
+      console.log(`  Emergency fix bead exists: ${emergency.id}. Forcing assignment.`);
+      return emergency.id;
     }
 
     // Extract error summary from stderr/stdout
@@ -512,16 +512,25 @@ function ensureMainHealth(): void {
     );
 
     console.log("  Creating P0 emergency fix bead.");
-    br(
+    const createOutput = br(
       `create --no-auto-flush --title='Fix pre-existing typecheck failures on main' ` +
       `--type=bug --priority=0 --description='Typecheck fails on main. This blocks all Trench agents.\n\n${summary.replace(/'/g, "'\\''")}'`,
     );
     br("sync --flush-only");
 
+    // Extract the new bead ID
+    const idMatch = /Created\s+(\S+):/.exec(createOutput);
+    const newId = idMatch?.[1] ?? null;
+
     notifyChair(
       "Main health check failed",
       "Typecheck fails on main. Created P0 emergency bead. Next Trench will attempt fix.",
     );
+
+    if (newId) {
+      console.log(`  Created emergency bead: ${newId}. Forcing assignment.`);
+    }
+    return newId;
   }
 }
 
@@ -567,10 +576,20 @@ async function main(): Promise<void> {
 
     // 3. Ready beads → Trench
     if (ready.length > 0) {
-      // Health check: ensure main is clean before wasting a session
-      ensureMainHealth();
+      // Health check: if main is broken, force-assign the emergency fix bead
+      const emergencyId = ensureMainHealth();
 
-      const result = spawnRoleClean("trench");
+      let result: SpawnResult;
+      if (emergencyId) {
+        result = spawnRoleClean("trench",
+          `URGENT: Main has pre-existing typecheck failures that block all agents. ` +
+          `Claim bead ${emergencyId} (do NOT call claimBead — it may pick a different bead). ` +
+          `Instead, run: br update ${emergencyId} --claim, then br show ${emergencyId} --json ` +
+          `to read the description. Fix the typecheck failures, then call finishBead with ` +
+          `beadId="${emergencyId}" and your summary.`);
+      } else {
+        result = spawnRoleClean("trench");
+      }
       handleExit(result);
       continue;
     }
