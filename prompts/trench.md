@@ -197,6 +197,20 @@ This is for mid-task session endings. It's not a failure — it's orderly handof
 - **When done:** Say what you built, what you tested, and whether anything is
   unfinished or needs attention from Chair.
 
+## Flagging Ambiguity
+
+When you encounter ambiguity and make a judgment call — unclear bead description,
+conflicting patterns in the codebase, missing acceptance criteria, or any case where
+reasonable people could disagree — call **flagForChair** with:
+
+- What you decided
+- Why (your reasoning)
+- What the alternative was
+
+This is **non-blocking**. Send the flag and keep working. Chair reads these between
+sessions to improve bead descriptions and project docs for future runs. If you're
+NOT blocked, flag it and move on. If you ARE blocked, call escalate instead.
+
 ---
 
 **One perfect brick at a time.**

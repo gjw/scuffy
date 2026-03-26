@@ -92,6 +92,73 @@ function resetAttempts(beadId: string): void {
 
 // ─── Agent mail ──────────────────────────────────────────────────────────────
 
+/** Map role names to their agent mail identity. */
+const ROLE_AGENT_NAMES: Record<string, string> = {
+  scout: "SwiftScout",
+  trench: "RedTrench",
+  tower: "BoldTower",
+  "warden-light": "BrightWarden",
+  "warden-dark": "DarkWarden",
+};
+
+/**
+ * Check an agent's inbox for unread messages from HumanOverseer.
+ * Returns message bodies joined, or empty string if none.
+ */
+function fetchInbox(role: string): string {
+  const agentName = ROLE_AGENT_NAMES[role] ?? role;
+  try {
+    const payload = JSON.stringify({
+      jsonrpc: "2.0",
+      id: "inbox",
+      method: "tools/call",
+      params: {
+        name: "fetch_inbox",
+        arguments: { project_key: PROJECT_KEY, agent_name: agentName },
+      },
+    });
+    const raw = execFileSync(
+      "curl",
+      ["-sS", "--max-time", "5", "-X", "POST", MAIL_URL, "-H", "content-type: application/json", "-d", payload],
+      { timeout: 10_000, encoding: "utf-8" },
+    );
+    const response: unknown = JSON.parse(raw);
+
+    // MCP response: { result: { content: [{ type: "text", text: "..." }] } }
+    if (
+      typeof response === "object" &&
+      response !== null &&
+      "result" in response
+    ) {
+      const result = (response as Record<string, unknown>)["result"];
+      if (typeof result === "object" && result !== null && "content" in result) {
+        const content = (result as Record<string, unknown>)["content"];
+        if (Array.isArray(content)) {
+          const texts = content
+            .filter(
+              (c): c is { type: string; text: string } =>
+                typeof c === "object" &&
+                c !== null &&
+                "type" in c &&
+                (c as Record<string, unknown>)["type"] === "text" &&
+                "text" in c &&
+                typeof (c as Record<string, unknown>)["text"] === "string",
+            )
+            .map((c) => c.text);
+          const combined = texts.join("\n").trim();
+          if (combined.length > 0 && !combined.includes("No messages")) {
+            console.log(`  Inbox for ${agentName}: ${String(texts.length)} message(s)`);
+            return combined;
+          }
+        }
+      }
+    }
+  } catch {
+    // Mail not available — that's fine
+  }
+  return "";
+}
+
 function notifyChair(subject: string, body: string): void {
   try {
     const payload = JSON.stringify({
@@ -205,6 +272,13 @@ interface SpawnResult {
 
 function spawnRoleClean(role: string, instruction?: string): SpawnResult {
   console.log(`\n=== Spawning Scuffy as ${role} ===`);
+
+  // Check agent inbox — inject any messages from Chair into the instruction
+  const inbox = fetchInbox(role);
+  if (inbox.length > 0) {
+    const mailContext = `\n\n--- Messages from Chair ---\n${inbox}\n--- End messages ---\n\n`;
+    instruction = instruction ? instruction + mailContext : mailContext + "Process these messages, then proceed with your default task.";
+  }
 
   const args = [path.join(SCUFFY_ROOT, "dist/index.js"), "--headless", "--workdir", WORKDIR, "--role", role];
   if (instruction) args.push("--instruction", instruction);
