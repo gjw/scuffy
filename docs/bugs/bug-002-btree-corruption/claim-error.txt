@@ -1,0 +1,10 @@
+---exit: 2
+{
+  "error": {
+    "code": "DATABASE_ERROR",
+    "message": "Database error: internal error: cursor must be on a leaf to delete",
+    "hint": null,
+    "retryable": false,
+    "context": null
+  }
+}

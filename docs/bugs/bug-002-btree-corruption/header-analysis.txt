@@ -1,0 +1,7 @@
+file_size: 1363968
+page_size: 4096
+db_size_pages_header: 1
+actual_pages: 333
+change_counter: 0
+schema_cookie: 0
+sqlite_version_written: 3052000

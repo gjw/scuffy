@@ -1,0 +1,10 @@
+br doctor
+OK jsonl.merge_artifacts
+OK sync_jsonl_path: JSONL path is within sync allowlist
+OK sync_conflict_markers: No merge conflict markers found
+OK jsonl.parse: Parsed 82 records
+ERROR schema.tables: Missing tables: issues, dependencies, labels, comments, events, config, metadata, dirty_issues, export_hashes, blocked_issues_cache, child_counters
+OK schema.columns
+OK sqlite.integrity_check
+OK counts.db_vs_jsonl: Both have 82 records
+OK sync.metadata: External changes pending import
