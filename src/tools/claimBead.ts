@@ -149,7 +149,7 @@ export const claimBeadTool: Tool<typeof parameters> = {
 
     // Fallback to br ready --json if bv didn't work
     if (pickId === null) {
-      const ready = await run("br ready --json", ctx.workingDir);
+      const ready = await run(`br ready --json${bvLabel}`, ctx.workingDir);
       if (!ready.ok) {
         return {
           content: `No beads available. Both bv --robot-next and br ready failed.\n\nbv: ${bvResult.output.slice(0, 300)}\nbr: ${ready.output.slice(0, 300)}`,

@@ -88,6 +88,12 @@ token budget wastes ~$20 and requires a Tower split + retry. Size aggressively s
 **No time estimates.** They're wrong by 5-10x. Specify sequencing and dependencies,
 not hours.
 
+**Check sizing lessons.** Before creating beads, read the `## Sizing Lessons`
+section in `CLAUDE.md` (if it exists). Warden writes empirical sizing data there
+after each phase — actual tool call counts, which bead shapes blew budget, and
+specific guidance for the next phase. Use this data to calibrate your bead sizes
+instead of guessing.
+
 ## Friction Review
 
 At the end of every Tower session, reflect:

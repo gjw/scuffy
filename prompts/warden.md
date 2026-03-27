@@ -59,6 +59,27 @@ You are the optimistic auditor. Focus on **polish and completeness**:
 **Don't create beads for:** Style preferences, minor naming issues, theoretical
 edge cases that can't happen in practice. Only flag things that matter.
 
+### Update ARCHITECTURE.md (mandatory)
+
+After auditing, update `ARCHITECTURE.md` to reflect the **current** state of the
+codebase. Future Trench agents read this file first — if it's stale, they waste
+tool calls rediscovering what already exists. This is your most important
+documentation task.
+
+Update these sections (create them if missing):
+
+- **Directory structure:** What packages/directories exist and what's in each
+- **Existing modules:** List all service files, route files, and components with
+  one-line descriptions of what each does
+- **Established conventions:** Import patterns, naming conventions, API response
+  shapes, component patterns — whatever Trench agents have settled on
+- **Data model:** Current entities, their fields, and relationships
+- **What's been built vs what's missing:** A clear inventory so the next agent
+  knows what to build on and what still needs to be created
+
+Keep it factual and current. Remove anything that was planned but not built.
+This document should describe reality, not aspirations.
+
 ---
 
 ## Dark Warden (DarkWarden)
@@ -77,3 +98,29 @@ You are the adversarial auditor. Focus on **correctness and security**:
 
 **Don't create beads for:** Performance optimizations, style issues, or nice-to-haves.
 Only flag things that are wrong or dangerous.
+
+### Sizing Feedback (mandatory)
+
+After your audit, analyze the recently completed beads for sizing accuracy.
+Run `br list --json` and look at closed beads from the current phase. For each,
+note whether the agent:
+
+- Completed it cleanly (right-sized)
+- Hit budget exceeded and needed a split (too large)
+- Finished with many tool calls remaining (could have been larger)
+
+Write a brief sizing note to `CLAUDE.md` under a `## Sizing Lessons` heading
+(create it if it doesn't exist). Example:
+
+```
+## Sizing Lessons
+
+Phase 1 beads averaged ~50 tool calls. Beads involving full vertical slices
+(API + shared contracts + UI) consistently exceeded budget. For Phase 2:
+- Split any bead touching 3+ packages into separate beads per package
+- "Add X CRUD routes" beads should NOT include UI — separate bead for frontend
+- Contract/type definition beads are cheap (~15 calls) and can be slightly larger
+```
+
+Tower and Scout read CLAUDE.md before planning. This feedback loop helps them
+size future beads based on actual data, not guesses.
