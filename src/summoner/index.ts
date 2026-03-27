@@ -7,8 +7,8 @@
  * Usage: npx tsx src/summoner/index.ts [workspace-dir]
  */
 
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, createWriteStream } from "node:fs";
 import path from "node:path";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -495,6 +495,147 @@ function spawnRoleClean(role: string, instruction?: string, worktreePath?: strin
   }
 }
 
+// ─── Async spawn (for parallel slots) ─────────────────────────────────────────
+
+interface SlotState {
+  slotId: number;
+  beadId: string;
+  worktree: string;
+  promise: Promise<SpawnResult>;
+}
+
+/**
+ * Spawn a Trench asynchronously in a worktree. Returns a promise that resolves
+ * when the process exits. Non-blocking — multiple can run concurrently.
+ */
+function spawnRoleAsync(role: string, instruction: string | undefined, worktreePath: string): Promise<SpawnResult> {
+  const workdir = worktreePath;
+  const slotLabel = path.basename(worktreePath);
+  console.log(`\n=== Spawning Scuffy as ${role} [${slotLabel}] ===`);
+
+  const inbox = fetchInbox(role);
+  if (inbox.length > 0) {
+    const mailContext = `\n\n--- Messages from Chair ---\n${inbox}\n--- End messages ---\n\n`;
+    instruction = instruction ? instruction + mailContext : mailContext + "Process these messages, then proceed with your default task.";
+  }
+
+  const args = [path.join(SCUFFY_ROOT, "dist/index.js"), "--headless", "--workdir", workdir, "--role", role];
+  if (instruction) args.push("--instruction", instruction);
+
+  const logFile = path.join(WORKDIR, ".scuffy", `last-session-${slotLabel}.log`);
+
+  return new Promise((resolve) => {
+    const logStream = createWriteStream(logFile);
+    const child = spawn("/bin/bash", ["-c",
+      `SCUFFY_PARALLEL=1 node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1`],
+      { cwd: SCUFFY_ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SCUFFY_PARALLEL: "1" } },
+    );
+
+    let output = "";
+    child.stdout?.on("data", (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      process.stdout.write(`[${slotLabel}] ${text}`);
+      logStream.write(text);
+    });
+    child.stderr?.on("data", (data: Buffer) => {
+      const text = data.toString();
+      output += text;
+      process.stderr.write(`[${slotLabel}] ${text}`);
+      logStream.write(text);
+    });
+
+    child.on("close", (code) => {
+      logStream.end();
+      resolve({ exitCode: code ?? 1, output });
+    });
+
+    // Safety timeout: 10 minutes
+    setTimeout(() => {
+      try { child.kill("SIGTERM"); } catch { /* ignore */ }
+    }, 600_000);
+  });
+}
+
+/**
+ * Wait for any one slot to finish. Returns the finished slot.
+ */
+async function waitForOneSlot(slots: Map<number, SlotState>): Promise<{ slotId: number; beadId: string; worktree: string; result: SpawnResult }> {
+  const entries = [...slots.entries()];
+  const result = await Promise.race(
+    entries.map(([id, state]) =>
+      state.promise.then((r) => ({ slotId: id, beadId: state.beadId, worktree: state.worktree, result: r })),
+    ),
+  );
+  slots.delete(result.slotId);
+  return result;
+}
+
+/**
+ * Wait for ALL active slots to finish. Used before Warden/Tower/Scout (run alone).
+ */
+async function drainAllSlots(slots: Map<number, SlotState>): Promise<void> {
+  while (slots.size > 0) {
+    const finished = await waitForOneSlot(slots);
+    console.log(`  Slot ${String(finished.slotId)} finished (bead ${finished.beadId}, exit ${String(finished.result.exitCode)})`);
+    if (finished.result.exitCode === 0) {
+      const branchName = extractBranchFromOutput(finished.result.output);
+      if (branchName) {
+        handleParallelSuccess(branchName, finished.beadId, "Completed");
+      }
+    } else {
+      handleParallelFailure(finished.beadId);
+    }
+    handleExit(finished.result);
+  }
+}
+
+/** Extract branch name from Trench output (finishBead includes it in metadata). */
+function extractBranchFromOutput(output: string): string | null {
+  // Look for git branch from "Switched to a new branch 'task/...'" or current branch
+  const branchMatch = /(?:Switched to.*branch|On branch)\s+'?(task\/\S+)'?/i.exec(output);
+  if (branchMatch?.[1]) return branchMatch[1];
+
+  // Fallback: look for task branch in git output
+  const taskMatch = /task\/[\w-]+/.exec(output);
+  return taskMatch?.[0] ?? null;
+}
+
+/**
+ * Pre-claim a bead for a parallel slot. Uses bv --robot-next with phase filter,
+ * excluding already-claimed IDs.
+ */
+function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id: string; title: string } | null {
+  const labelArg = phaseLabel ? ` --label ${phaseLabel}` : "";
+  const bvResult = br(`--no-auto-flush list --json`);
+  try {
+    const beads = JSON.parse(bvResult) as Array<{ id: string; title: string; status: string; issue_type: string; priority: number }>;
+    const eligible = beads.filter((b) =>
+      b.status === "open" && !excludeIds.has(b.id) && !(b.issue_type === "bug" && b.priority === 0),
+    );
+    if (eligible.length === 0) return null;
+
+    // Try bv for ranking
+    const bvNext = br(`--no-auto-flush ready --json`);
+    try {
+      const ready = JSON.parse(bvNext) as Array<{ id: string; title: string }>;
+      const pick = ready.find((r) => !excludeIds.has(r.id));
+      if (pick) {
+        br(`update ${pick.id} --claim --no-auto-flush`);
+        return pick;
+      }
+    } catch { /* fall through */ }
+
+    // Fallback: first eligible
+    const pick = eligible[0];
+    if (pick) {
+      br(`update ${pick.id} --claim --no-auto-flush`);
+      return { id: pick.id, title: pick.title };
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
 // ─── Bead ID extraction ─────────────────────────────────────────────────────
 
 function extractBeadId(output: string): string | null {
@@ -825,7 +966,164 @@ async function main(): Promise<void> {
   console.log("Summoner finished.");
 }
 
-main().catch((err: unknown) => {
+// ─── Parallel main loop ──────────────────────────────────────────────────────
+
+async function mainParallel(): Promise<void> {
+  console.log(`Summoner started (parallel, ${String(MAX_PARALLEL_SLOTS)} slots) — workspace: ${WORKDIR}`);
+  mkdirSync(path.join(WORKDIR, ".scuffy"), { recursive: true });
+
+  const activeSlots = new Map<number, SlotState>();
+  const claimedIds = new Set<string>();
+
+  for (;;) {
+    // Brake check
+    if (existsSync(PAUSE_FILE)) {
+      console.log(`Paused. Remove ${PAUSE_FILE} to resume.`);
+      if (activeSlots.size > 0) {
+        console.log(`  Draining ${String(activeSlots.size)} active slot(s) before pausing...`);
+        await drainAllSlots(activeSlots);
+        claimedIds.clear();
+      }
+      while (existsSync(PAUSE_FILE)) {
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+      console.log("Resumed.");
+      resetToMain();
+    }
+
+    // Only reset to main when no slots are active (main worktree must be free)
+    if (activeSlots.size === 0) {
+      resetToMain();
+      recoverStaleBeads();
+    }
+
+    const allBeads = listBeads();
+    const ready = readyBeads();
+
+    // 1. No beads → Scout (run alone)
+    if (allBeads.length === 0) {
+      await drainAllSlots(activeSlots);
+      claimedIds.clear();
+      console.log("\n=== No beads found. Running Scout to bootstrap. ===");
+      spawnRoleClean("scout");
+      console.log("=== Scout done. ===");
+      continue;
+    }
+
+    // 2. Phase closing? (run alone)
+    const phase = closingPhase();
+    if (phase) {
+      await drainAllSlots(activeSlots);
+      claimedIds.clear();
+      runPhaseClose(phase);
+      continue;
+    }
+
+    // 3. Warden audit (run alone)
+    if (completedSinceWarden >= WARDEN_INTERVAL) {
+      await drainAllSlots(activeSlots);
+      claimedIds.clear();
+      console.log(`\n=== ${String(completedSinceWarden)} beads completed since last audit. Running Warden. ===`);
+      spawnRoleClean("warden-dark", `Audit the last ${String(completedSinceWarden)} completed beads. Focus on code quality, test coverage, and integration issues.`);
+      drainWardenBeads();
+      spawnRoleClean("warden-light", `Review the last ${String(completedSinceWarden)} completed beads for polish, cleanup, and documentation.`);
+      drainWardenBeads();
+      completedSinceWarden = 0;
+      continue;
+    }
+
+    // 4. Ready beads → fill parallel Trench slots
+    if (ready.length > 0) {
+      // Health check: if main is broken, only one slot for emergency fix
+      const emergencyId = ensureMainHealth();
+      if (emergencyId) {
+        await drainAllSlots(activeSlots);
+        claimedIds.clear();
+        const result = spawnRoleClean("trench",
+          `URGENT: Main has typecheck failures. Call claimBead with beadId="${emergencyId}" ` +
+          `to claim the emergency fix bead. Fix the failures, then call finishBead.`);
+        handleExit(result);
+        continue;
+      }
+
+      // Detect current phase
+      const currentPhase = detectCurrentPhase(allBeads);
+      if (currentPhase?.isPlaceholder) {
+        await drainAllSlots(activeSlots);
+        claimedIds.clear();
+        console.log(`=== Phase placeholder detected: ${currentPhase.label}. Invoking Tower to expand. ===`);
+        spawnRoleClean("tower",
+          `Expand phase placeholder bead ${currentPhase.placeholderId ?? "unknown"}. ` +
+          `Read the bead description for scope and exit criteria. Read BRIEF.md for product vision. ` +
+          `Read the current codebase to understand what exists. Create 8-15 detailed implementation ` +
+          `beads labeled "${currentPhase.label}". Then close the placeholder bead using closeBead. ` +
+          `Call escalate when done.`);
+        continue;
+      }
+
+      // Fill empty slots
+      while (activeSlots.size < MAX_PARALLEL_SLOTS) {
+        const slotId = findEmptySlotId(activeSlots);
+        const bead = preClaimBead(currentPhase?.label ?? null, claimedIds);
+        if (!bead) break;
+
+        claimedIds.add(bead.id);
+        const wt = ensureWorktree(slotId);
+        const phaseArg = currentPhase ? ` Call claimBead with phaseLabel="${currentPhase.label}".` : "";
+        const promise = spawnRoleAsync("trench",
+          `Work on bead ${bead.id}: ${bead.title}.${phaseArg}` +
+          ` Call claimBead with beadId="${bead.id}" to register your session.`,
+          wt);
+        activeSlots.set(slotId, { slotId, beadId: bead.id, worktree: wt, promise });
+        console.log(`  Slot ${String(slotId)}: bead ${bead.id} — ${bead.title.slice(0, 50)}`);
+      }
+    }
+
+    // Nothing to spawn and nothing running → done
+    if (activeSlots.size === 0 && ready.length === 0) {
+      console.log("No beads ready. Done.");
+      break;
+    }
+
+    // Wait for any slot to finish
+    if (activeSlots.size > 0) {
+      const finished = await waitForOneSlot(activeSlots);
+      claimedIds.delete(finished.beadId);
+      console.log(`\n=== Slot ${String(finished.slotId)} finished: bead ${finished.beadId} (exit ${String(finished.result.exitCode)}) ===`);
+
+      if (finished.result.exitCode === 0) {
+        const branchName = extractBranchFromOutput(finished.result.output);
+        if (branchName) {
+          // Merge to main from the main worktree (sequential)
+          handleParallelSuccess(branchName, finished.beadId, "Completed");
+        } else {
+          // Can't find branch — close bead anyway
+          br(`close ${finished.beadId} --reason "Completed (branch not found for merge)"`);
+        }
+        completedSinceWarden++;
+        resetAttempts(finished.beadId);
+      } else {
+        handleParallelFailure(finished.beadId);
+        handleExit(finished.result);
+      }
+    }
+  }
+
+  console.log("Summoner finished (parallel).");
+}
+
+/** Find the lowest unused slot ID. */
+function findEmptySlotId(slots: Map<number, SlotState>): number {
+  for (let i = 0; i < MAX_PARALLEL_SLOTS; i++) {
+    if (!slots.has(i)) return i;
+  }
+  return MAX_PARALLEL_SLOTS; // shouldn't happen
+}
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+const entry = MAX_PARALLEL_SLOTS > 1 ? mainParallel : main;
+entry().catch((err: unknown) => {
   console.error("Summoner fatal:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
