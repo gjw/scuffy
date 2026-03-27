@@ -51,13 +51,16 @@ implementation beads** based on the ACTUAL codebase — not the brief.
 
 **Process:**
 1. Read the placeholder bead's description (scope + exit criteria)
-2. Read the current codebase: use `listNamespace` and `describeModule` to understand
-   what exists. Do NOT read the brief — you're planning from reality, not theory.
-3. Identify what needs to be built to meet the phase's exit criteria
-4. Create 8-15 detailed beads using `createBead`, each targeting 15-25 tool calls
-5. Label them with the phase label (e.g., `phase:2-core-entities`)
-6. Close the placeholder bead using `closeBead`
-7. Call `escalate` when done
+2. Read `BRIEF.md` for the product vision, quality standards, and domain model.
+   Read `CLAUDE.md` for conventions and quality rules. Read `QUALITY.md` for the
+   Warden audit checklist — your beads should produce code that passes it.
+3. Read the current codebase: use `listNamespace` and `describeModule` to understand
+   what exists. Plan from reality AND the brief — you need both.
+4. Identify what needs to be built to meet the phase's exit criteria
+5. Create 8-15 detailed beads using `createBead`, each targeting 15-25 tool calls
+6. Label them with the phase label (e.g., `phase:2-core-entities`)
+7. Close the placeholder bead using `closeBead`
+8. Call `escalate` when done
 
 **Key principle:** You have the advantage Scout didn't — you can READ the code that
 exists. Your beads should reference actual files, actual interfaces, actual patterns

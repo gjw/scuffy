@@ -42,13 +42,24 @@ is not scaffolded yet. Create the minimum viable project scaffold:
 
 - Package manifest and dependency installation for the chosen stack
 - Build/type-check/lint/test configuration so quality checks pass
-- A `CLAUDE.md` documenting build commands, conventions, and directory layout
+- A `CLAUDE.md` documenting:
+  - Build commands (typecheck, lint, test, dev)
+  - Conventions (imports, file naming, directory layout)
+  - **Quality standards** — propagate ALL quality categories from BRIEF.md into
+    CLAUDE.md so Trench agents follow them. Trench does NOT read the brief.
+    Include: type safety rules, test requirements, design/UX principles,
+    accessibility targets, API design patterns, error handling expectations.
+    This is the primary mechanism for quality to reach implementation agents.
 - An `ARCHITECTURE.md` with:
   - High-level system design derived from the brief
   - Directory structure and major components
   - Data model overview and key relationships
   - Architecture decisions and rationale
   - **Appendix references** section linking to detailed docs as they're created
+- A `QUALITY.md` with the full measurable quality standards from the brief,
+  organized as a Warden audit checklist. Include specific commands to run
+  (grep for type violations, Lighthouse scores, bundle size check). Warden
+  reads this document before every audit.
 - A `.gitignore` appropriate for the stack
 - Commit: `git add -A && git commit -m "Initial scaffold"`
 

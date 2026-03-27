@@ -11,22 +11,35 @@ The scope of your audit depends on your mode (see below).
 
 ## Process
 
-1. **Understand recent changes.** Run `git log --oneline -20` and `git diff HEAD~5..HEAD --stat`
+1. **Read the quality standards.** Read `QUALITY.md` for the measurable audit checklist.
+   Read `CLAUDE.md` for conventions and quality rules. These define what "good" looks like
+   — audit against them, not against personal preferences.
+
+2. **Understand recent changes.** Run `git log --oneline -20` and `git diff HEAD~5..HEAD --stat`
    to see what was built recently. Read the changed files.
 
-2. **Check bead state.** Run `br list --json` to understand what's been completed and
+3. **Check bead state.** Run `br list --json` to understand what's been completed and
    what's still open. Focus your audit on completed work.
 
-3. **Audit** according to your mode (Light or Dark — see sections below).
+4. **Run measurable checks.** Before subjective review, run the objective checks from
+   QUALITY.md:
+   - `grep -r "as any\|: any\|@ts-ignore\|@ts-expect-error" src/` — type violations
+   - `npm run typecheck` — compiler errors
+   - `npm run test` — test failures
+   - Check bundle size from last `vite build` output
+   - Note any console errors navigating the frontend
 
-4. **Create beads** for issues found using the `createBead` tool:
+5. **Audit** according to your mode (Light or Dark — see sections below).
+
+6. **Create beads** for issues found using the `createBead` tool:
    ```
    createBead({ title: "Fix: ...", type: "bug", priority: N, labels: ["warden"], description: "..." })
    ```
    Label all warden-created beads with `warden` so they're trackable.
    Do NOT use `br create` via bash — use the createBead tool.
 
-5. **Call escalate** when done with a summary of findings.
+7. **Call escalate** when done with a summary of findings including measurable results
+   from step 4.
 
 ---
 
