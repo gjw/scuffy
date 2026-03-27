@@ -40,7 +40,13 @@ function brJson(args: string): unknown[] {
   const out = br(`${args} --json --no-auto-flush`);
   try {
     const parsed: unknown = JSON.parse(out);
-    return Array.isArray(parsed) ? parsed : [];
+    // br 0.1.34+ wraps list output in { issues: [...] }
+    if (Array.isArray(parsed)) return parsed;
+    if (typeof parsed === "object" && parsed !== null && "issues" in parsed) {
+      const issues = (parsed as Record<string, unknown>)["issues"];
+      if (Array.isArray(issues)) return issues;
+    }
+    return [];
   } catch {
     return [];
   }
@@ -609,7 +615,12 @@ function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id:
   const labelArg = phaseLabel ? ` --label ${phaseLabel}` : "";
   const bvResult = br(`--no-auto-flush list --json`);
   try {
-    const beads = JSON.parse(bvResult) as Array<{ id: string; title: string; status: string; issue_type: string; priority: number }>;
+    let rawBeads: unknown = JSON.parse(bvResult);
+    if (typeof rawBeads === "object" && rawBeads !== null && !Array.isArray(rawBeads) && "issues" in rawBeads) {
+      rawBeads = (rawBeads as Record<string, unknown>)["issues"];
+    }
+    const beads = rawBeads as Array<{ id: string; title: string; status: string; issue_type: string; priority: number }>;
+    if (!Array.isArray(beads)) return null;
     const eligible = beads.filter((b) =>
       b.status === "open" && !excludeIds.has(b.id) && !(b.issue_type === "bug" && b.priority === 0),
     );
@@ -618,7 +629,12 @@ function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id:
     // Try bv for ranking
     const bvNext = br(`--no-auto-flush ready --json`);
     try {
-      const ready = JSON.parse(bvNext) as Array<{ id: string; title: string }>;
+      let rawReady: unknown = JSON.parse(bvNext);
+      if (typeof rawReady === "object" && rawReady !== null && !Array.isArray(rawReady) && "issues" in rawReady) {
+        rawReady = (rawReady as Record<string, unknown>)["issues"];
+      }
+      const ready = rawReady as Array<{ id: string; title: string }>;
+      if (!Array.isArray(ready)) throw new Error("not array");
       const pick = ready.find((r) => !excludeIds.has(r.id));
       if (pick) {
         br(`update ${pick.id} --claim --no-auto-flush`);

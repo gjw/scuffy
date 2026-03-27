@@ -359,7 +359,11 @@ export const finishBeadTool: Tool<typeof parameters> = {
       const beadList = await run("br list --json", ctx.workingDir);
       let emergencyExists = false;
       try {
-        const beads: unknown = JSON.parse(beadList.output);
+        let beads: unknown = JSON.parse(beadList.output);
+        // br 0.1.34+ wraps output in { issues: [...] }
+        if (typeof beads === "object" && beads !== null && !Array.isArray(beads) && "issues" in beads) {
+          beads = (beads as Record<string, unknown>)["issues"];
+        }
         if (Array.isArray(beads)) {
           emergencyExists = beads.some(
             (b: unknown) =>

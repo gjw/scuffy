@@ -158,7 +158,11 @@ export const claimBeadTool: Tool<typeof parameters> = {
       }
 
       try {
-        const parsed: unknown = JSON.parse(ready.output);
+        let parsed: unknown = JSON.parse(ready.output);
+        // br 0.1.34+ wraps output in { issues: [...] }
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && "issues" in parsed) {
+          parsed = (parsed as Record<string, unknown>)["issues"];
+        }
         const beads = z.array(BeadSchema).parse(parsed);
 
         // Filter: exclude human-only and stale in_progress
