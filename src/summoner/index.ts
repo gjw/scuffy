@@ -622,13 +622,19 @@ function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id:
     const ready = rawReady as Array<{ id: string; title: string; issue_type: string; priority: number; labels: string[] | null }>;
 
     // Filter: not already claimed, not emergency P0 bugs (handled separately),
-    // not beads with 2+ failed attempts (Fix 6)
+    // not beads with 2+ failed attempts, not phase placeholders,
+    // and only beads in the current phase (if specified)
     const currentAttempts = loadAttempts();
-    const eligible = ready.filter((b) =>
-      !excludeIds.has(b.id) &&
-      !(b.issue_type === "bug" && b.priority === 0) &&
-      (currentAttempts.get(b.id) ?? 0) < 2,
-    );
+    const eligible = ready.filter((b) => {
+      if (excludeIds.has(b.id)) return false;
+      if (b.issue_type === "bug" && b.priority === 0) return false;
+      if ((currentAttempts.get(b.id) ?? 0) >= 2) return false;
+      const labels = b.labels ?? [];
+      if (labels.includes("phase-placeholder")) return false;
+      // Phase gating: only pick beads from the specified phase
+      if (phaseLabel && !labels.some((l) => l === phaseLabel)) return false;
+      return true;
+    });
     if (eligible.length === 0) return null;
 
     const pick = eligible[0];
