@@ -1135,31 +1135,50 @@ async function mainParallel(): Promise<void> {
       console.log(`\n=== Slot ${String(finished.slotId)} finished: bead ${finished.beadId} (exit ${String(finished.result.exitCode)}) ===`);
 
       if (finished.result.exitCode === 0) {
-        // Find the task branch in the worktree. git branch --show-current may
-        // return empty (detached HEAD), so also search for task/* branches.
+        // Read structured exit metadata (written by headless.ts)
+        const slotLabel = path.basename(finished.worktree);
         let branchName: string | null = null;
         try {
-          branchName = execFileSync("git", ["branch", "--show-current"], {
-            cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
-          }).trim() || null;
-        } catch { /* ignore */ }
-        if (!branchName) {
-          // Detached HEAD — find the most recent task/ branch
+          const exitFile = path.join(finished.worktree, ".scuffy", `exit-${slotLabel}.json`);
+          const exitMeta: unknown = JSON.parse(readFileSync(exitFile, "utf-8"));
+          if (typeof exitMeta === "object" && exitMeta !== null && "branch" in exitMeta) {
+            branchName = (exitMeta as Record<string, unknown>)["branch"] as string | null;
+          }
+        } catch {
+          // Fallback: read branch directly from worktree
           try {
-            const branches = execFileSync("git", ["branch", "--sort=-committerdate"], {
+            branchName = execFileSync("git", ["branch", "--show-current"], {
               cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
-            }).trim();
-            const taskBranch = branches.split("\n")
-              .map((b) => b.trim().replace(/^\* /, ""))
-              .find((b) => b.startsWith("task/"));
-            if (taskBranch) branchName = taskBranch;
+            }).trim() || null;
           } catch { /* ignore */ }
+          if (!branchName) {
+            try {
+              const branches = execFileSync("git", ["branch", "--sort=-committerdate"], {
+                cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
+              }).trim();
+              branchName = branches.split("\n")
+                .map((b) => b.trim().replace(/^\* /, ""))
+                .find((b) => b.startsWith("task/")) ?? null;
+            } catch { /* ignore */ }
+          }
         }
 
         if (branchName && branchName !== "main") {
-          handleParallelSuccess(branchName, finished.beadId, "Completed");
+          const merged = mergeToMain(branchName);
+          if (merged) {
+            br(`close ${finished.beadId} --reason "Completed"`);
+            br("sync --flush-only");
+          } else {
+            // Merge conflict — spawn a focused Trench to resolve it
+            console.log(`  Merge conflict for ${branchName}. Spawning resolution Trench.`);
+            const resolveResult = spawnRoleClean("trench",
+              `MERGE CONFLICT: Branch ${branchName} (bead ${finished.beadId}) cannot merge to main cleanly. ` +
+              `Checkout main, run git merge ${branchName}, resolve ALL conflicts, run npm run typecheck to verify, ` +
+              `commit the merge, then call finishBead with beadId="${finished.beadId}".`);
+            handleExit(resolveResult, finished.beadId);
+          }
         } else {
-          console.log(`  WARNING: Could not find task branch for bead ${finished.beadId} in ${finished.worktree}. Work may not be merged.`);
+          console.log(`  WARNING: Could not find task branch for bead ${finished.beadId}. Work may not be merged.`);
           br(`close ${finished.beadId} --reason "Completed (branch not found for merge)"`);
         }
         completedSinceWarden++;

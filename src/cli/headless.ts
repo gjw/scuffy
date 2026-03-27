@@ -1,7 +1,9 @@
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 import type { AgentConfig } from "../config.js";
+import type { ExitMetadata } from "../agent/exitContract.js";
 import { runAgentLoop } from "../agent/loop.js";
 import type { Middleware } from "../agent/middleware.js";
 import type { Session } from "../agent/types.js";
@@ -147,6 +149,37 @@ export async function runHeadless(
     } catch {
       // Git commit failed — nothing we can do, move on
     }
+  }
+
+  // Write structured exit metadata for the summoner to read
+  try {
+    let branch: string | null = null;
+    try {
+      branch = execFileSync("git", ["branch", "--show-current"], {
+        cwd: config.workingDir, encoding: "utf-8", timeout: 5_000,
+      }).trim() || null;
+    } catch { /* ignore */ }
+
+    const isBypass = result.response.includes("(bypass)");
+    const exitMeta: ExitMetadata = {
+      exitCode: result.exitCode ?? 0,
+      reason: result.exitCode === 0 ? (isBypass ? "bypass" : "success")
+        : result.exitCode === 2 ? "budget_exceeded"
+        : "unknown",
+      beadId: session.claimedBeadId,
+      branch,
+      summary: result.response.slice(0, 300),
+      bypass: isBypass,
+      timestamp: new Date().toISOString(),
+    };
+
+    const slotId = process.env["SCUFFY_SLOT_ID"];
+    const exitFile = slotId
+      ? path.join(config.workingDir, ".scuffy", `exit-${slotId}.json`)
+      : path.join(config.workingDir, ".scuffy", "exit.json");
+    writeFileSync(exitFile, JSON.stringify(exitMeta, null, 2));
+  } catch {
+    // Non-fatal — summoner falls back to stdout parsing
   }
 
   process.exit(result.exitCode ?? 0);
