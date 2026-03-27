@@ -240,8 +240,8 @@ export function parseAllSessions(workspaceDir: string): SessionSummary[] {
   let files = [...sessionFiles];
 
   const summaries = files
-    .map((f) => parseSession(f))
-    .filter((s) => s.startTime !== "")
+    .map((f) => { try { return parseSession(f); } catch { return null; } })
+    .filter((s): s is SessionSummary => s !== null && s.startTime !== "")
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   return summaries;
