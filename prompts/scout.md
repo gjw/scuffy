@@ -113,11 +113,21 @@ Label them `phase:1-<name>` (e.g., `phase:1-skeleton`).
 - Basic navigation/routing shell
 - Health check endpoint
 
-**Size rules (same as before):**
-- Each bead must complete in under **25 tool calls**
+**Size rules — THE CONTEXT TAX:**
+
+Agents spend ~50% of their tool calls just READING before they write anything
+(describeModule, readFile, grep to orient). So a 25-call budget means ~12 calls
+for actual implementation. Size accordingly:
+
+- **Target 15-20 tool calls total** (not 25 — leave margin for exploration)
+- **Max 2 files created per bead.** Each new file costs ~3 tool calls (write + verify).
+- **Max 1 existing file modified per bead.** Reading + understanding + editing an
+  existing file costs ~5 tool calls.
 - ONE focused deliverable per bead
 - If the title contains "and", split it
-- If the description mentions more than 3 files, split it
+- If the description mentions more than 2 files to create/modify, split it
+- **Name files explicitly** in the description: "Create `api/src/routes/programs.ts`
+  and `api/src/routes/programs.test.ts`" — this helps the agent avoid exploration
 
 ### 7. Create placeholder beads for phases 2-N
 

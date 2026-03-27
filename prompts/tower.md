@@ -72,13 +72,17 @@ upfront planning.
 **The #1 cause of wasted sessions is oversized beads.** Every bead that blows the
 token budget wastes ~$20 and requires a Tower split + retry. Size aggressively small.
 
-- **Target: 15-25 tool calls per bead.** Past 40, budget blowout is near-certain.
-- **Max 3 files created/modified per bead.** More files = more reads = more context.
+- **Target: 12-18 tool calls per bead.** Agents spend ~50% of calls on exploration
+  (reading code) before writing. At 18 calls, they've used most of their effective
+  budget. Past 30, budget blowout is near-certain.
+- **Max 2 files created/modified per bead.** Each file costs ~3-5 tool calls.
 - **One concern per bead.** If the title contains "and", split it.
-- **When splitting an oversized bead:** Create 4-5 tiny sub-beads, not 2-3 medium ones.
-  The original bead blew the budget at ~60 tool calls. Splitting into 3 gives ~20 calls
-  each — barely enough margin. Splitting into 5 gives ~12 calls each — safe.
-- **Prefer more beads over fewer.** 30 beads at 15 tool calls each is vastly cheaper
+- **Name specific files** in the description — "modify `api/src/routes/programs.ts`"
+  not "add program routes." This eliminates exploration waste.
+- **When splitting an oversized bead:** Create 5-6 tiny sub-beads, not 2-3 medium ones.
+  The original bead blew the budget at ~50 tool calls. Splitting into 3 gives ~17 each —
+  still risky. Splitting into 5 gives ~10 each — safe.
+- **Prefer more beads over fewer.** 30 beads at 12 tool calls each is vastly cheaper
   than 10 beads where half blow the budget.
 
 **No time estimates.** They're wrong by 5-10x. Specify sequencing and dependencies,
