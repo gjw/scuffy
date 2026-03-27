@@ -1175,6 +1175,19 @@ async function mainParallel(): Promise<void> {
           }
         }
 
+        // Also try: find any task/ branch in the worktree by listing branches
+        if (!branchName || branchName === "main") {
+          try {
+            const branches = execFileSync("git", ["branch", "--sort=-committerdate"], {
+              cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
+            }).trim();
+            const taskBranch = branches.split("\n")
+              .map((b) => b.trim().replace(/^\* /, ""))
+              .find((b) => b.startsWith("task/"));
+            if (taskBranch) branchName = taskBranch;
+          } catch { /* ignore */ }
+        }
+
         if (branchName && branchName !== "main") {
           const merged = mergeToMain(branchName);
           if (merged) {
