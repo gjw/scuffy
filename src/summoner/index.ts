@@ -763,9 +763,15 @@ function drainWardenBeads(): void {
         `${String(consecutiveFailures)} consecutive Trench failures draining warden beads. Likely a connection or provider issue.`);
       break;
     }
-    console.log(`=== ${String(wardenBeads.length)} warden bead(s) to fix ===`);
-    const result = spawnRoleClean("trench");
-    handleExit(result);
+    // Pick the first warden bead and force-assign it
+    const wardenBead = wardenBeads[0];
+    if (!wardenBead) break;
+    console.log(`=== ${String(wardenBeads.length)} warden bead(s) to fix. Assigning ${wardenBead.id}. ===`);
+    br(`update ${wardenBead.id} --claim --no-auto-flush`);
+    const result = spawnRoleClean("trench",
+      `Fix warden issue. Call claimBead with beadId="${wardenBead.id}". ` +
+      `Read the bead description and fix the issue, then call finishBead.`);
+    handleExit(result, wardenBead.id);
     if (result.exitCode !== 0) {
       consecutiveFailures++;
     } else {
@@ -976,6 +982,23 @@ async function main(): Promise<void> {
           ? `Work on the current phase.${phaseArg}`
           : undefined);
       handleExit(result);
+
+      // Broken Windows: if bead completed via bypass, force-drain the P0 before
+      // resuming feature work.
+      if (result.exitCode === 0 && /WARNING: Pre-existing .* bypassed/.test(result.output)) {
+        console.log("=== Bypass detected — draining emergency P0 before resuming. ===");
+        const beads = listBeads();
+        const openP0 = beads.find(
+          (b) => b.status !== "closed" && b.issue_type === "bug" && b.priority === 0,
+        );
+        if (openP0) {
+          console.log(`  Forcing P0 bead ${openP0.id}.`);
+          const fixResult = spawnRoleClean("trench",
+            `URGENT: Pre-existing test/lint failures from a bypass. ` +
+            `Call claimBead with beadId="${openP0.id}". Fix the failures, then call finishBead.`);
+          handleExit(fixResult);
+        }
+      }
       continue;
     }
 
@@ -1144,6 +1167,36 @@ async function mainParallel(): Promise<void> {
         completedSinceWarden++;
         resetAttempts(finished.beadId);
         consecutiveParallelFailures = 0;
+
+        // Broken Windows: if this bead completed via bypass (pre-existing
+        // failures), force-drain the P0 emergency bead before resuming
+        // feature work. This prevents broken windows from compounding.
+        if (/WARNING: Pre-existing .* bypassed/.test(finished.result.output)) {
+          console.log("=== Bypass detected — draining emergency P0 before resuming. ===");
+          await drainAllSlots(activeSlots);
+          claimedIds.clear();
+          const p0Id = ensureMainHealth();
+          if (p0Id) {
+            const fixResult = spawnRoleClean("trench",
+              `URGENT: Pre-existing test/typecheck failures must be fixed before new work. ` +
+              `Call claimBead with beadId="${p0Id}" to claim the emergency fix bead. ` +
+              `Fix the failures, then call finishBead.`);
+            handleExit(fixResult);
+          } else {
+            // ensureMainHealth only checks typecheck — also check for open P0 bugs
+            const beads = listBeads();
+            const openP0 = beads.find(
+              (b) => b.status !== "closed" && b.issue_type === "bug" && b.priority === 0,
+            );
+            if (openP0) {
+              console.log(`  Forcing P0 bead ${openP0.id} (test/lint failures).`);
+              const fixResult = spawnRoleClean("trench",
+                `URGENT: Pre-existing test/lint failures from a bypass. ` +
+                `Call claimBead with beadId="${openP0.id}". Fix the failures, then call finishBead.`);
+              handleExit(fixResult);
+            }
+          }
+        }
       } else {
         handleParallelFailure(finished.beadId);
         handleExit(finished.result, finished.beadId);
