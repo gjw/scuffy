@@ -46,15 +46,24 @@ try {
   beadData.open = openBeads.filter((b) => b.status === "open").length;
 
   // Extract phases from ALL beads (open + closed)
+  // Beads without phase labels go into "warden" or "fixes" buckets
   const phaseMap = new Map<string, { total: number; closed: number }>();
   for (const bead of allBeads) {
-    for (const label of bead.labels ?? []) {
-      if (label.startsWith("phase:")) {
-        const entry = phaseMap.get(label) ?? { total: 0, closed: 0 };
-        entry.total++;
-        if (bead.status === "closed") entry.closed++;
-        phaseMap.set(label, entry);
-      }
+    const labels = bead.labels ?? [];
+    const phaseLabel = labels.find((l) => l.startsWith("phase:"));
+    if (phaseLabel) {
+      const entry = phaseMap.get(phaseLabel) ?? { total: 0, closed: 0 };
+      entry.total++;
+      if (bead.status === "closed") entry.closed++;
+      phaseMap.set(phaseLabel, entry);
+    } else {
+      // No phase label — bucket by type
+      const isWarden = labels.includes("warden");
+      const bucket = isWarden ? "warden fixes" : "maintenance";
+      const entry = phaseMap.get(bucket) ?? { total: 0, closed: 0 };
+      entry.total++;
+      if (bead.status === "closed") entry.closed++;
+      phaseMap.set(bucket, entry);
     }
   }
   beadData.phases = [...phaseMap.entries()]
