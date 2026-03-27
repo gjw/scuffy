@@ -631,8 +631,10 @@ function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id:
       if ((currentAttempts.get(b.id) ?? 0) >= 2) return false;
       const labels = b.labels ?? [];
       if (labels.includes("phase-placeholder")) return false;
-      // Phase gating: only pick beads from the specified phase
-      if (phaseLabel && !labels.some((l) => l === phaseLabel)) return false;
+      // Phase gating: pick beads from the current phase OR unlabeled beads
+      // (emergency fixes, warden beads, conflict resolution have no phase label)
+      const hasAnyPhaseLabel = labels.some((l) => l.startsWith("phase:"));
+      if (phaseLabel && hasAnyPhaseLabel && !labels.includes(phaseLabel)) return false;
       return true;
     });
     if (eligible.length === 0) return null;
