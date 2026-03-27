@@ -205,18 +205,42 @@ export function parseSession(filePath: string): SessionSummary {
   };
 }
 
-/** Parse all session files in a workspace's .scuffy/sessions/ directory. */
+/** Parse all session files in a workspace's .scuffy/sessions/ directory.
+ * Also collects sessions from parallel worktree slots (.worktrees/slot-N/). */
 export function parseAllSessions(workspaceDir: string): SessionSummary[] {
   const sessionsDir = path.join(workspaceDir, ".scuffy", "sessions");
-  let files: string[];
+  const sessionFiles = new Set<string>();
+
+  // Main workspace sessions
   try {
-    files = readdirSync(sessionsDir).filter((f) => f.endsWith(".jsonl"));
-  } catch {
-    return [];
-  }
+    for (const f of readdirSync(sessionsDir)) {
+      if (f.endsWith(".jsonl")) sessionFiles.add(path.join(sessionsDir, f));
+    }
+  } catch { /* no sessions dir */ }
+
+  // Parallel worktree sessions
+  const worktreesDir = path.join(workspaceDir, ".worktrees");
+  try {
+    for (const slot of readdirSync(worktreesDir)) {
+      const slotSessions = path.join(worktreesDir, slot, ".scuffy", "sessions");
+      try {
+        for (const f of readdirSync(slotSessions)) {
+          if (f.endsWith(".jsonl")) {
+            // Use filename as dedup key (same UUID = same session)
+            const mainPath = path.join(sessionsDir, f);
+            if (!sessionFiles.has(mainPath)) {
+              sessionFiles.add(path.join(slotSessions, f));
+            }
+          }
+        }
+      } catch { /* slot has no sessions */ }
+    }
+  } catch { /* no worktrees dir */ }
+
+  let files = [...sessionFiles];
 
   const summaries = files
-    .map((f) => parseSession(path.join(sessionsDir, f)))
+    .map((f) => parseSession(f))
     .filter((s) => s.startTime !== "")
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 

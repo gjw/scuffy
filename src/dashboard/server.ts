@@ -44,8 +44,16 @@ function fetchBeadData(_sessions: SessionSummary[]): DashboardData["beads"] {
       cwd: workspaceDir, timeout: 10_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
     });
 
-    const openBeads = JSON.parse(openOutput) as Array<{ id: string; status: string; labels: string[] | null }>;
-    const closedBeads = JSON.parse(closedOutput) as Array<{ id: string; status: string; labels: string[] | null }>;
+    let openParsed: unknown = JSON.parse(openOutput);
+    if (typeof openParsed === "object" && openParsed !== null && !Array.isArray(openParsed) && "issues" in openParsed) {
+      openParsed = (openParsed as Record<string, unknown>)["issues"];
+    }
+    let closedParsed: unknown = JSON.parse(closedOutput);
+    if (typeof closedParsed === "object" && closedParsed !== null && !Array.isArray(closedParsed) && "issues" in closedParsed) {
+      closedParsed = (closedParsed as Record<string, unknown>)["issues"];
+    }
+    const openBeads = (openParsed ?? []) as Array<{ id: string; status: string; labels: string[] | null }>;
+    const closedBeads = (closedParsed ?? []) as Array<{ id: string; status: string; labels: string[] | null }>;
     const allBeads = [...openBeads, ...closedBeads];
 
     beadData.total = allBeads.length;
