@@ -1147,8 +1147,12 @@ async function mainParallel(): Promise<void> {
         const slotLabel = path.basename(finished.worktree);
         let branchName: string | null = null;
         try {
-          const exitFile = path.join(finished.worktree, ".scuffy", `exit-${slotLabel}.json`);
-          const exitMeta: unknown = JSON.parse(readFileSync(exitFile, "utf-8"));
+          // Try slot-specific exit file first, then generic
+          const exitFileSlot = path.join(finished.worktree, ".scuffy", `exit-${slotLabel}.json`);
+          const exitFileGeneric = path.join(finished.worktree, ".scuffy", "exit.json");
+          const exitFilePath = existsSync(exitFileSlot) ? exitFileSlot : exitFileGeneric;
+          console.log(`  Reading exit file: ${exitFilePath} (exists: ${String(existsSync(exitFilePath))})`);
+          const exitMeta: unknown = JSON.parse(readFileSync(exitFilePath, "utf-8"));
           if (typeof exitMeta === "object" && exitMeta !== null && "branch" in exitMeta) {
             branchName = (exitMeta as Record<string, unknown>)["branch"] as string | null;
           }
