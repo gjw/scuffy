@@ -434,13 +434,20 @@ function mergeToMain(branchName: string): boolean {
 function handleParallelSuccess(branchName: string, beadId: string, summary: string): void {
   const merged = mergeToMain(branchName);
   if (!merged) {
-    // Create a conflict-resolution bead
-    br(
-      `create --no-auto-flush --title='Resolve merge conflict for ${branchName}' ` +
-      `--type=bug --priority=0 --description='Branch ${branchName} (bead ${beadId}) passed checks but conflicted when merging to main. Resolve and merge manually.'`,
-    );
-    // Release the bead back to open
-    br(`update ${beadId} --status=open --no-auto-flush`);
+    // Increment attempts so preClaimBead skips it after 2 failures
+    const count = incrementAttempts(beadId);
+    console.log(`  Merge conflict for ${beadId}: attempt ${String(count)}`);
+    if (count >= 3) {
+      // Create a conflict-resolution bead and halt the original
+      br(
+        `create --no-auto-flush --title='Resolve merge conflict for ${branchName}' ` +
+        `--type=bug --priority=0 --description='Branch ${branchName} (bead ${beadId}) conflicted with main ${String(count)} times. Resolve and merge manually.'`,
+      );
+      br(`update ${beadId} --labels=blocked --no-auto-flush`);
+    } else {
+      // Release back to open — preClaimBead will skip it after 2 attempts
+      br(`update ${beadId} --status=open --no-auto-flush`);
+    }
   } else {
     br(`close ${beadId} --reason ${JSON.stringify(summary)}`);
   }
