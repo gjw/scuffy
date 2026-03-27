@@ -547,6 +547,68 @@ The application must be deployable from Phase 1 onward:
 - Static frontend build (`vite build`) producing servable dist/ files
 - A clear deploy path: what commands to run, what ports to expose
 
+### Category 7: Bundle Size and Performance
+
+Build with performance in mind from the start — don't optimize later.
+
+- **Route-based code splitting.** Each major page should be a lazy-loaded chunk.
+  Use `React.lazy()` + `Suspense` for route components. The initial page load
+  should not include code for pages the user hasn't navigated to.
+- **Tree-shakeable imports.** Import specific functions, not entire libraries.
+  `import { format } from 'date-fns'` not `import * as dateFns from 'date-fns'`.
+- **No unused dependencies.** Every package in package.json should be imported
+  somewhere. Warden should cross-reference.
+- **Target metrics:** Initial bundle under 200KB gzipped. Largest chunk under
+  100KB gzipped. Verify with `vite build` output.
+
+### Category 8: API Design and Efficiency
+
+Even with in-memory persistence, design the API for production patterns:
+
+- **Pagination on all list endpoints.** Accept `limit` and `offset` (or cursor).
+  Never return unbounded arrays. Default limit: 50.
+- **No N+1 patterns.** When loading a list of programs with their project counts,
+  do ONE query for programs and ONE for project counts, not one per program.
+  The in-memory adapter should batch, not loop.
+- **Consistent error responses.** Every error returns `{ error: string, code?: string }`.
+  Not sometimes a string, sometimes an object, sometimes HTML.
+- **Consistent response envelopes.** List endpoints return
+  `{ items: T[], total: number }`. Detail endpoints return `{ item: T }`.
+  Warden should verify consistency across all routes.
+
+### Category 9: Runtime Error and Edge Case Handling
+
+How the application behaves when things go wrong:
+
+- **React error boundaries** around every route and major section. A crash in
+  the Issues page should not take down the Dashboard.
+- **Input validation** on every form submission and every API endpoint. Reject
+  malformed input with helpful error messages. Empty strings, overlong text,
+  special characters, HTML/script injection — all handled.
+- **Loading states everywhere.** Every data-fetching component shows a loading
+  indicator. No blank flashes. No layout shift.
+- **Network failure graceful degradation.** API calls that fail should show a
+  retry button, not a white screen. Catch all fetch errors.
+- **Zero console errors during normal usage.** Warden should open DevTools and
+  navigate every page — zero errors, zero warnings.
+- **Server-side: zero unhandled promise rejections.** Every async route handler
+  catches errors. Express error middleware returns a clean JSON error.
+
+### Category 10: Accessibility Compliance
+
+Target WCAG 2.1 AA conformance. Build it in from the start, don't retrofit.
+
+- **Semantic HTML.** Use `<nav>`, `<main>`, `<article>`, `<section>`, `<button>`,
+  `<table>`, `<form>`, `<label>`. Not styled `<div>`s for everything.
+- **ARIA labels** on all interactive elements without visible text labels. Icon
+  buttons need `aria-label`. Form inputs need associated `<label>` elements.
+- **Keyboard navigation.** Every interactive element reachable via Tab. Focus
+  visible. Enter/Space activate buttons. Escape closes modals/dropdowns.
+- **Color contrast.** 4.5:1 minimum for normal text, 3:1 for large text.
+  Don't rely on color alone to convey information (add icons or text).
+- **Lighthouse accessibility target:** 90+ on every page. Warden should run
+  Lighthouse or axe-core audits and report scores.
+
 ## 14) Rebuild Guardrails
 
 When planning the rebuild, preserve these truths:
