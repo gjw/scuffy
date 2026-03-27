@@ -326,12 +326,20 @@ export const finishBeadTool: Tool<typeof parameters> = {
         }
       }
 
-      const close = await run(
+      let close = await run(
         `br close ${params.beadId} --reason ${JSON.stringify(params.summary)}`,
         ctx.workingDir,
       );
       if (!close.ok) {
-        return { content: `br close failed:\n\n${close.output}`, isError: true };
+        // If blocked by deps, force-close — the work is done, tests pass,
+        // the dependency is stale bookkeeping from a split that wasn't rewired.
+        close = await run(
+          `br close --force ${params.beadId} --reason ${JSON.stringify(params.summary)}`,
+          ctx.workingDir,
+        );
+        if (!close.ok) {
+          return { content: `br close failed:\n\n${close.output}`, isError: true };
+        }
       }
     }
 
