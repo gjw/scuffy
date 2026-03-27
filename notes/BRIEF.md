@@ -448,7 +448,106 @@ previous createBead calls in the same session. Do NOT guess or fabricate bead ID
 the tool will reject invalid references. If you need to reference a bead you created
 earlier, use the exact ID string from the tool's response.
 
-## 13) Rebuild Guardrails
+## 13) Quality Standards
+
+These are measurable standards, not aspirations. Warden audits against them. Trench
+agents are expected to meet them on every bead.
+
+### Category 1: Type Safety
+
+The strength of TypeScript's type system as used in this codebase. Measured by:
+
+- **Zero `any` types** — explicit or implicit. Use `unknown` + narrowing. If the
+  compiler infers `any` (e.g., untyped parameters, missing return types), fix it.
+- **Zero `as` type assertions** — unless preceded by a runtime check that proves the
+  type. `as unknown as T` is never acceptable.
+- **Zero `!` non-null assertions** — use optional chaining, nullish coalescing, or
+  explicit narrowing instead.
+- **Zero `@ts-ignore` / `@ts-expect-error`** — if TypeScript complains, fix the types.
+- **Strict mode enabled** — `strict: true`, `noUncheckedIndexedAccess: true`,
+  `exactOptionalPropertyTypes: true` in tsconfig.
+- **All function parameters explicitly typed.** All exported functions have explicit
+  return types.
+
+Warden should be able to run `grep -r "as any\|: any\|@ts-ignore\|@ts-expect-error" src/`
+and find zero matches.
+
+### Category 2: Test Quality
+
+Tests are a first-class deliverable, not an afterthought. Every bead that adds or
+changes behavior must include or update tests.
+
+- **All tests pass at all times.** A bead that breaks existing tests must fix them
+  before completion. Never leave failing tests — finishBead rejects this.
+- **Vertical test slices.** When adding an entity (e.g., Programs), write tests in
+  the same bead: persistence tests, route tests, and a basic component render test.
+  Do NOT defer tests to a separate "add tests" phase.
+- **Every API route**: at least one happy-path test and one error/validation test.
+- **Every persistence operation**: test with realistic multi-record data, not
+  single-item trivial cases. Test workspace scoping, filtering, edge cases.
+- **React components**: at minimum, a render test that doesn't crash. For interactive
+  components, test user actions (click, submit).
+- **Don't mock what you own.** The in-memory persistence IS the test double — test
+  against it directly. Only mock external services.
+- **Realistic test data.** Use diverse names, multiple entities in different states,
+  edge cases (empty lists, max-length strings, special characters).
+
+### Category 3: Design and UX
+
+The build should look intentional, not generated. Every page should answer a question.
+
+- **Information density.** Tufte's principle: maximize the data-ink ratio. Every pixel
+  should communicate information. No decorative chrome, no empty cards, no spacer divs.
+  Dashboards should be dense with actionable data.
+- **Accessibility.** Target WCAG AA:
+  - Semantic HTML: `<nav>`, `<main>`, `<article>`, `<section>`, `<button>` (not styled divs)
+  - ARIA labels on interactive elements
+  - Keyboard navigable (tab order, focus visible)
+  - Sufficient color contrast (4.5:1 for text, 3:1 for large text)
+- **All view states handled.** Every page must handle: loading, empty, error, and
+  populated states. "No programs yet — create one" is better than a blank page.
+  "Failed to load issues" with a retry button is better than a silent failure.
+- **Consistent spacing and typography.** Use a spacing scale (4px, 8px, 16px, 24px,
+  32px). Use a type scale (headings, body, small). Don't ad-hoc pixel values.
+- **Responsive basics.** Works on desktop (1024+) and tablet (768+). Mobile is stretch.
+
+### Category 4: Seed Data
+
+The application ships with seeded demo data that tells a realistic story:
+
+- **Multiple users** with different roles (admin, member) and reporting relationships
+- **Multiple programs** at different stages (planning, active, completed)
+- **Multiple sprints** with issues in every state (backlog, in progress, review, done)
+- **Weekly plans and retros** in various approval states
+- **Enough volume** to make dashboards meaningful (5-10 of each entity)
+- **Diverse names and content** — not "Test User 1" or "Lorem ipsum"
+
+Seed data should make a grader say "this feels like a real project management tool"
+within 10 seconds of logging in.
+
+### Category 5: Build Approach — Vertical Slices
+
+Each bead should produce a visible, deployable increment. Build vertically (one entity
+end-to-end: persistence + routes + tests + view) rather than horizontally (all
+persistence, then all routes, then all views).
+
+Good bead: "Add Programs list page with API route, persistence, and render test"
+Bad bead: "Add persistence layer for all entities"
+
+This means each bead can be demoed. The Docent (if present) can evaluate after any bead,
+not just at phase boundaries. And if the build stops mid-way, every completed bead left
+something usable behind.
+
+### Category 6: Deployment Readiness
+
+The application must be deployable from Phase 1 onward:
+
+- Health check endpoint (`/health`) reporting service status
+- Environment-based configuration (port, host, API URL via env vars, not hardcoded)
+- Static frontend build (`vite build`) producing servable dist/ files
+- A clear deploy path: what commands to run, what ports to expose
+
+## 14) Rebuild Guardrails
 
 When planning the rebuild, preserve these truths:
 - programs are the required organizational root for work
