@@ -534,7 +534,7 @@ function spawnRoleAsync(role: string, instruction: string | undefined, worktreeP
     const logStream = createWriteStream(logFile);
     const child = spawn("/bin/bash", ["-c",
       `SCUFFY_PARALLEL=1 node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1`],
-      { cwd: SCUFFY_ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SCUFFY_PARALLEL: "1" } },
+      { cwd: SCUFFY_ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SCUFFY_PARALLEL: "1", SCUFFY_SLOT_ID: slotLabel } },
     );
 
     let output = "";

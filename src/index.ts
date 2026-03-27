@@ -212,7 +212,8 @@ async function main(): Promise<void> {
     const roleDefault = resolvedRole ? getRoleConfig(resolvedRole).defaultInstruction : undefined;
     const instruction =
       args.instruction ?? process.env["SCUFFY_INSTRUCTION"] ?? roleDefault ?? DEFAULT_HEADLESS_INSTRUCTION;
-    await runHeadless(registry, middleware, config, provider, instruction, notifyHuman, recordOutcome);
+    await runHeadless(registry, middleware, config, provider, instruction, notifyHuman, recordOutcome,
+      resolvedRole ? { role: resolvedRole, agentName: config.agentName } : undefined);
   } else {
     console.log(`Scuffy agent (${config.provider}/${config.model})`);
     console.log(`Working directory: ${config.workingDir}`);

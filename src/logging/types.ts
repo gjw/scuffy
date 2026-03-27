@@ -16,6 +16,13 @@ export type SessionStartEvent = {
   sessionId: string;
   timestamp: string;
   instruction: string;
+  /** Structured identity — set by headless runner */
+  role?: string | undefined;          // "trench", "scout", "tower", "warden-light", "warden-dark"
+  agentName?: string | undefined;     // "RedTrench", "BlueTrench", "SwiftScout", etc.
+  model?: string | undefined;         // "gpt-5.4", "claude-sonnet-4-6"
+  tokenBudget?: number | undefined;   // 800000
+  parallel?: boolean | undefined;     // true if running in worktree
+  slotId?: string | undefined;        // "slot-0", "slot-1"
 };
 
 export type LLMRequestEvent = {

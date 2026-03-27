@@ -53,6 +53,11 @@ interface RawEvent {
   message?: string;
   content?: string;
   instruction?: string;
+  role?: string;
+  agentName?: string;
+  tokenBudget?: number;
+  parallel?: boolean;
+  slotId?: string;
   totalTokens?: { in: number; out: number };
 }
 
@@ -91,9 +96,13 @@ export function parseSession(filePath: string): SessionSummary {
       case "session_start":
         if (event.sessionId) sessionId = event.sessionId;
         if (event.timestamp) startTime = event.timestamp;
-        if (event.instruction) {
+        // Prefer structured role from session metadata (new format)
+        if (event.role) {
+          role = event.role;
+        } else if (event.instruction) {
           role = deriveRole(event.instruction);
         }
+        if (event.model) model = event.model;
         break;
 
       case "llm_request":

@@ -23,6 +23,7 @@ export async function runHeadless(
   instruction: string,
   notifyHuman?: (message: string) => Promise<void>,
   recordOutcome?: (status: "success" | "failure" | "partial", rules: string) => Promise<void>,
+  identity?: { role?: string; agentName?: string } | undefined,
 ): Promise<void> {
   const sessionId = crypto.randomUUID();
   const session: Session = {
@@ -46,6 +47,12 @@ export async function runHeadless(
     sessionId,
     timestamp: new Date().toISOString(),
     instruction,
+    role: identity?.role,
+    agentName: identity?.agentName ?? config.agentName,
+    model: config.model,
+    tokenBudget: config.tokenBudget,
+    parallel: process.env["SCUFFY_PARALLEL"] === "1",
+    slotId: process.env["SCUFFY_SLOT_ID"],
   });
 
   const startTime = Date.now();
