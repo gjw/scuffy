@@ -20,6 +20,8 @@ const PROJECT_KEY = SCUFFY_ROOT;
 const PAUSE_FILE = path.join(WORKDIR, ".pause");
 const ATTEMPTS_FILE = path.join(WORKDIR, ".summoner-attempts");
 const WARDEN_INTERVAL = 8; // Run Warden audit every N completed beads
+const MAX_PARALLEL_SLOTS = Number(process.env["SCUFFY_PARALLEL_SLOTS"] ?? "1");
+const WORKTREES_DIR = path.join(WORKDIR, ".worktrees");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -315,6 +317,138 @@ function syncBeadState(): void {
   }
 }
 
+// ─── Worktree management ─────────────────────────────────────────────────────
+
+/**
+ * Ensure a worktree slot exists and is reset to current main.
+ * Creates the worktree on first use, resets it on subsequent uses.
+ * Symlinks .beads/, node_modules/, and .scuffy/ to the main workspace.
+ */
+function ensureWorktree(slot: number): string {
+  const wtPath = path.join(WORKTREES_DIR, `slot-${String(slot)}`);
+  const branchName = `wt-slot-${String(slot)}`;
+
+  if (!existsSync(wtPath)) {
+    // Create the worktree
+    mkdirSync(WORKTREES_DIR, { recursive: true });
+    execFileSync("git", ["worktree", "add", "--detach", wtPath], {
+      cwd: WORKDIR,
+      timeout: 15_000,
+      stdio: "pipe",
+    });
+
+    // Symlink shared resources
+    const symlinks: Array<[string, string]> = [
+      [path.join(WORKDIR, ".beads"), path.join(wtPath, ".beads")],
+      [path.join(WORKDIR, ".scuffy"), path.join(wtPath, ".scuffy")],
+    ];
+
+    // node_modules at root and in each workspace
+    if (existsSync(path.join(WORKDIR, "node_modules"))) {
+      symlinks.push([path.join(WORKDIR, "node_modules"), path.join(wtPath, "node_modules")]);
+    }
+    for (const ws of ["api", "web", "shared"]) {
+      const nmPath = path.join(WORKDIR, ws, "node_modules");
+      if (existsSync(nmPath)) {
+        mkdirSync(path.join(wtPath, ws), { recursive: true });
+        symlinks.push([nmPath, path.join(wtPath, ws, "node_modules")]);
+      }
+    }
+
+    for (const [target, link] of symlinks) {
+      try {
+        execFileSync("ln", ["-sfn", target, link], { timeout: 5_000, stdio: "pipe" });
+      } catch {
+        // Symlink failed — non-fatal, Trench will just use its own copy
+      }
+    }
+
+    console.log(`  Created worktree slot-${String(slot)} at ${wtPath}`);
+  }
+
+  // Reset worktree to current main HEAD
+  try {
+    execFileSync("git", ["checkout", "--detach", "main"], {
+      cwd: wtPath,
+      timeout: 10_000,
+      stdio: "pipe",
+    });
+    // Clean any leftover files from previous Trench
+    execFileSync("git", ["clean", "-fd"], {
+      cwd: wtPath,
+      timeout: 10_000,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["checkout", "--", "."], {
+      cwd: wtPath,
+      timeout: 10_000,
+      stdio: "pipe",
+    });
+  } catch {
+    // Reset failed — try removing and recreating
+    try {
+      execFileSync("git", ["worktree", "remove", "--force", wtPath], {
+        cwd: WORKDIR,
+        timeout: 10_000,
+        stdio: "pipe",
+      });
+    } catch { /* ignore */ }
+    return ensureWorktree(slot); // Recurse once to recreate
+  }
+
+  return wtPath;
+}
+
+/**
+ * Merge a Trench's completed branch into main from the main worktree.
+ * Returns true if merge succeeded, false if conflict.
+ */
+function mergeToMain(branchName: string): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["merge", branchName, "--no-edit"],
+      { cwd: WORKDIR, timeout: 30_000, stdio: "pipe" },
+    );
+    console.log(`  Merged ${branchName} to main.`);
+    return true;
+  } catch {
+    // Merge conflict — abort and report
+    try {
+      execFileSync("git", ["merge", "--abort"], { cwd: WORKDIR, timeout: 5_000, stdio: "pipe" });
+    } catch { /* ignore */ }
+    console.error(`  Merge conflict: ${branchName} could not be merged to main.`);
+    return false;
+  }
+}
+
+/**
+ * After a successful Trench exit in parallel mode: merge branch, close bead, sync.
+ */
+function handleParallelSuccess(branchName: string, beadId: string, summary: string): void {
+  const merged = mergeToMain(branchName);
+  if (!merged) {
+    // Create a conflict-resolution bead
+    br(
+      `create --no-auto-flush --title='Resolve merge conflict for ${branchName}' ` +
+      `--type=bug --priority=0 --description='Branch ${branchName} (bead ${beadId}) passed checks but conflicted when merging to main. Resolve and merge manually.'`,
+    );
+    // Release the bead back to open
+    br(`update ${beadId} --status=open --no-auto-flush`);
+  } else {
+    br(`close ${beadId} --reason ${JSON.stringify(summary)}`);
+  }
+  br("sync --flush-only");
+}
+
+/**
+ * After a failed Trench exit in parallel mode: release bead, sync.
+ */
+function handleParallelFailure(beadId: string): void {
+  br(`update ${beadId} --status=open --no-auto-flush`);
+  br("sync --flush-only");
+}
+
 // ─── Spawning ────────────────────────────────────────────────────────────────
 
 interface SpawnResult {
@@ -322,8 +456,10 @@ interface SpawnResult {
   output: string;
 }
 
-function spawnRoleClean(role: string, instruction?: string): SpawnResult {
-  console.log(`\n=== Spawning Scuffy as ${role} ===`);
+function spawnRoleClean(role: string, instruction?: string, worktreePath?: string): SpawnResult {
+  const workdir = worktreePath ?? WORKDIR;
+  const slotLabel = worktreePath ? ` [${path.basename(worktreePath)}]` : "";
+  console.log(`\n=== Spawning Scuffy as ${role}${slotLabel} ===`);
 
   // Check agent inbox — inject any messages from Chair into the instruction
   const inbox = fetchInbox(role);
@@ -332,13 +468,16 @@ function spawnRoleClean(role: string, instruction?: string): SpawnResult {
     instruction = instruction ? instruction + mailContext : mailContext + "Process these messages, then proceed with your default task.";
   }
 
-  const args = [path.join(SCUFFY_ROOT, "dist/index.js"), "--headless", "--workdir", WORKDIR, "--role", role];
+  const args = [path.join(SCUFFY_ROOT, "dist/index.js"), "--headless", "--workdir", workdir, "--role", role];
   if (instruction) args.push("--instruction", instruction);
 
   const logFile = path.join(WORKDIR, ".scuffy", "last-session.log");
 
+  // Set SCUFFY_PARALLEL for worktree spawns so finishBead/escalate skip merge/close
+  const envPrefix = worktreePath ? "SCUFFY_PARALLEL=1 " : "";
+
   // Use shell to tee output and capture exit code
-  const cmd = `node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1 | tee '${logFile}'; exit \${PIPESTATUS[0]}`;
+  const cmd = `${envPrefix}node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1 | tee '${logFile}'; exit \${PIPESTATUS[0]}`;
 
   try {
     execFileSync("/bin/bash", ["-c", cmd], {
