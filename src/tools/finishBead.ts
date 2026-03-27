@@ -2,6 +2,9 @@ import { z } from "zod";
 import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
+/** When set, finishBead skips merge-to-main and bead close — summoner handles those. */
+const PARALLEL_MODE = process.env["SCUFFY_PARALLEL"] === "1";
+
 /** Glob patterns that identify test files. */
 const TEST_FILE_PATTERNS = [".test.ts", ".spec.ts", ".test.tsx", ".spec.tsx"];
 
@@ -303,31 +306,33 @@ export const finishBeadTool: Tool<typeof parameters> = {
       }
     }
 
-    // ── Merge to main (shared) ──
+    // ── Merge to main + close bead ──
+    // In parallel mode, the summoner handles these (can't checkout main from a worktree,
+    // and bead DB writes must be sequential). finishBead just exits with metadata.
 
-    if (branchName && branchName !== "main") {
-      const merge = await run(
-        `git checkout main && git merge ${branchName} --no-edit && git checkout ${branchName}`,
+    if (!PARALLEL_MODE) {
+      if (branchName && branchName !== "main") {
+        const merge = await run(
+          `git checkout main && git merge ${branchName} --no-edit && git checkout ${branchName}`,
+          ctx.workingDir,
+        );
+        if (!merge.ok) {
+          ctx.log({
+            type: "escalation",
+            timestamp: new Date().toISOString(),
+            reason: "flag" as const,
+            message: `Merge to main failed for branch ${branchName}: ${merge.output.slice(0, 200)}`,
+          });
+        }
+      }
+
+      const close = await run(
+        `br close ${params.beadId} --reason ${JSON.stringify(params.summary)}`,
         ctx.workingDir,
       );
-      if (!merge.ok) {
-        ctx.log({
-          type: "escalation",
-          timestamp: new Date().toISOString(),
-          reason: "flag" as const,
-          message: `Merge to main failed for branch ${branchName}: ${merge.output.slice(0, 200)}`,
-        });
+      if (!close.ok) {
+        return { content: `br close failed:\n\n${close.output}`, isError: true };
       }
-    }
-
-    // ── Close the bead (shared) ──
-
-    const close = await run(
-      `br close ${params.beadId} --reason ${JSON.stringify(params.summary)}`,
-      ctx.workingDir,
-    );
-    if (!close.ok) {
-      return { content: `br close failed:\n\n${close.output}`, isError: true };
     }
 
     ctx.log({
@@ -372,7 +377,9 @@ export const finishBeadTool: Tool<typeof parameters> = {
         // Can't parse — create the bead to be safe
       }
 
-      if (!emergencyExists) {
+      // In parallel mode, summoner creates emergency beads (sequential DB writes).
+      // In single mode, finishBead creates them directly.
+      if (!PARALLEL_MODE && !emergencyExists) {
         const emergencyDesc =
           `Pre-existing failures detected during finishBead for bead ${params.beadId}.\n\n` +
           `Failing files: ${failingFilesList}\n\n${errorSummary}\n\n` +
@@ -388,18 +395,15 @@ export const finishBeadTool: Tool<typeof parameters> = {
         );
       }
 
-      // No pause — the P0 priority ensures the next Trench picks up the
-      // emergency bead first. The summoner health check provides a second
-      // guard. This keeps the pipeline autonomous.
-
-      // Notify Chair
       await ctx.notifyHuman(
         `PRE-EXISTING FAILURES bypassed for bead ${params.beadId}. ` +
         `Failing: ${failedCheckNames} in ${failingFilesList}. ` +
         `Emergency P0 bead created.`,
       );
 
-      await run("br sync --flush-only", ctx.workingDir);
+      if (!PARALLEL_MODE) {
+        await run("br sync --flush-only", ctx.workingDir);
+      }
       await run(
         `cm outcome success "" --text ${JSON.stringify(`${params.summary} (bypass: pre-existing failures)`)} 2>/dev/null`,
         ctx.workingDir,
@@ -411,7 +415,7 @@ export const finishBeadTool: Tool<typeof parameters> = {
           `Bead ${params.beadId} complete (bypass): ${params.summary}\n\n` +
           `WARNING: Pre-existing ${failedCheckNames} failures in ${failingFilesList} bypassed.\n` +
           `Emergency P0 bead created. Next Trench will fix it.`,
-        metadata: { exit: true, exitCode: 0 },
+        metadata: { exit: true, exitCode: 0, branch: branchName, bypass: true },
       };
     }
 
@@ -425,7 +429,9 @@ export const finishBeadTool: Tool<typeof parameters> = {
             : "")
         : "";
 
-    await run("br sync --flush-only", ctx.workingDir);
+    if (!PARALLEL_MODE) {
+      await run("br sync --flush-only", ctx.workingDir);
+    }
     await run(
       `cm outcome success "" --text ${JSON.stringify(params.summary)} 2>/dev/null`,
       ctx.workingDir,
@@ -434,7 +440,7 @@ export const finishBeadTool: Tool<typeof parameters> = {
 
     return {
       content: `Bead ${params.beadId} complete: ${params.summary}${auditNote}`,
-      metadata: { exit: true, exitCode: 0 },
+      metadata: { exit: true, exitCode: 0, branch: branchName },
     };
   },
 };

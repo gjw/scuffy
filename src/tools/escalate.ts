@@ -2,6 +2,8 @@ import { z } from "zod";
 import { guardedRun } from "./dcgGuard.js";
 import type { Tool, ToolContext, ToolResult } from "./types.js";
 
+const PARALLEL_MODE = process.env["SCUFFY_PARALLEL"] === "1";
+
 const parameters = z.object({
   reason: z.enum(["stuck", "need_replan", "blocked", "bead_too_large"]).describe("Why the agent is escalating. Use 'bead_too_large' if the bead scope is clearly too big for one session — summoner will invoke Tower to split it."),
   message: z.string().describe("Human-readable explanation of the situation."),
@@ -17,10 +19,13 @@ export const escalateTool: Tool<typeof parameters> = {
     "and signals session exit with error code. Summoner pauses for human review.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
-    // Release claimed bead so the next session doesn't re-grab it
+    // Release claimed bead so the next session doesn't re-grab it.
+    // In parallel mode, summoner handles bead state — skip br writes.
     const claimedId = ctx.getClaimedBeadId();
-    if (claimedId !== null) {
+    if (claimedId !== null && !PARALLEL_MODE) {
       await run(`br update ${claimedId} --status=open`, ctx.workingDir);
+    }
+    if (claimedId !== null) {
       ctx.setClaimedBeadId(null);
     }
 
@@ -41,8 +46,10 @@ export const escalateTool: Tool<typeof parameters> = {
     );
     await ctx.recordOutcome("failure", `${params.reason}: ${params.message}`);
 
-    // Flush beads to JSONL (single export per session)
-    await run("br sync --flush-only", ctx.workingDir);
+    // Flush beads to JSONL — summoner handles this in parallel mode
+    if (!PARALLEL_MODE) {
+      await run("br sync --flush-only", ctx.workingDir);
+    }
 
     // Log escalation event
     ctx.log({
