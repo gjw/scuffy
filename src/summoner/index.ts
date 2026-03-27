@@ -1114,13 +1114,26 @@ async function mainParallel(): Promise<void> {
       console.log(`\n=== Slot ${String(finished.slotId)} finished: bead ${finished.beadId} (exit ${String(finished.result.exitCode)}) ===`);
 
       if (finished.result.exitCode === 0) {
-        // Read branch directly from the worktree (reliable — no regex parsing)
+        // Find the task branch in the worktree. git branch --show-current may
+        // return empty (detached HEAD), so also search for task/* branches.
         let branchName: string | null = null;
         try {
           branchName = execFileSync("git", ["branch", "--show-current"], {
             cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
           }).trim() || null;
         } catch { /* ignore */ }
+        if (!branchName) {
+          // Detached HEAD — find the most recent task/ branch
+          try {
+            const branches = execFileSync("git", ["branch", "--sort=-committerdate"], {
+              cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
+            }).trim();
+            const taskBranch = branches.split("\n")
+              .map((b) => b.trim().replace(/^\* /, ""))
+              .find((b) => b.startsWith("task/"));
+            if (taskBranch) branchName = taskBranch;
+          } catch { /* ignore */ }
+        }
 
         if (branchName && branchName !== "main") {
           handleParallelSuccess(branchName, finished.beadId, "Completed");
