@@ -165,11 +165,13 @@ export const claimBeadTool: Tool<typeof parameters> = {
         }
         const beads = z.array(BeadSchema).parse(parsed);
 
-        // Filter: exclude human-only and stale in_progress
+        // Filter: exclude human-only, stale in_progress, and wrong phase
         const eligible = beads.filter((b) => {
           if (b.status === "in_progress") return false;
           const labels = b.labels ?? [];
           if (labels.some((l) => EXCLUDED_LABELS.includes(l))) return false;
+          // Phase filter: if phaseLabel is set, only pick beads in that phase
+          if (params.phaseLabel && !labels.includes(params.phaseLabel)) return false;
           return true;
         });
 

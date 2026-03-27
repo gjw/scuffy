@@ -612,37 +612,27 @@ function extractBranchFromOutput(output: string): string | null {
  * excluding already-claimed IDs.
  */
 function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id: string; title: string } | null {
-  const labelArg = phaseLabel ? ` --label ${phaseLabel}` : "";
-  const bvResult = br(`--no-auto-flush list --json`);
+  // Use br ready (dependency-aware) as the ONLY source — never fall back to
+  // br list which includes beads with unresolved blockers.
+  const readyResult = br("--no-auto-flush ready --json");
   try {
-    let rawBeads: unknown = JSON.parse(bvResult);
-    if (typeof rawBeads === "object" && rawBeads !== null && !Array.isArray(rawBeads) && "issues" in rawBeads) {
-      rawBeads = (rawBeads as Record<string, unknown>)["issues"];
+    let rawReady: unknown = JSON.parse(readyResult);
+    if (typeof rawReady === "object" && rawReady !== null && !Array.isArray(rawReady) && "issues" in rawReady) {
+      rawReady = (rawReady as Record<string, unknown>)["issues"];
     }
-    const beads = rawBeads as Array<{ id: string; title: string; status: string; issue_type: string; priority: number }>;
-    if (!Array.isArray(beads)) return null;
-    const eligible = beads.filter((b) =>
-      b.status === "open" && !excludeIds.has(b.id) && !(b.issue_type === "bug" && b.priority === 0),
+    if (!Array.isArray(rawReady)) return null;
+    const ready = rawReady as Array<{ id: string; title: string; issue_type: string; priority: number; labels: string[] | null }>;
+
+    // Filter: not already claimed, not emergency P0 bugs (handled separately),
+    // not beads with 2+ failed attempts (Fix 6)
+    const currentAttempts = loadAttempts();
+    const eligible = ready.filter((b) =>
+      !excludeIds.has(b.id) &&
+      !(b.issue_type === "bug" && b.priority === 0) &&
+      (currentAttempts.get(b.id) ?? 0) < 2,
     );
     if (eligible.length === 0) return null;
 
-    // Try bv for ranking
-    const bvNext = br(`--no-auto-flush ready --json`);
-    try {
-      let rawReady: unknown = JSON.parse(bvNext);
-      if (typeof rawReady === "object" && rawReady !== null && !Array.isArray(rawReady) && "issues" in rawReady) {
-        rawReady = (rawReady as Record<string, unknown>)["issues"];
-      }
-      const ready = rawReady as Array<{ id: string; title: string }>;
-      if (!Array.isArray(ready)) throw new Error("not array");
-      const pick = ready.find((r) => !excludeIds.has(r.id));
-      if (pick) {
-        br(`update ${pick.id} --claim --no-auto-flush`);
-        return pick;
-      }
-    } catch { /* fall through */ }
-
-    // Fallback: first eligible
     const pick = eligible[0];
     if (pick) {
       br(`update ${pick.id} --claim --no-auto-flush`);
@@ -757,15 +747,30 @@ function runPhaseClose(phase: string): void {
 }
 
 function drainWardenBeads(): void {
+  let consecutiveFailures = 0;
   for (;;) {
     const beads = listBeads();
     const wardenBeads = beads.filter((b) =>
       b.status !== "closed" && (b.labels ?? []).includes("warden")
     );
     if (wardenBeads.length === 0) break;
+    if (consecutiveFailures >= 3) {
+      console.log(
+        `=== Circuit breaker: ${String(consecutiveFailures)} consecutive failures ` +
+        `draining warden beads. ${String(wardenBeads.length)} remain. ===`,
+      );
+      notifyChair("Circuit breaker tripped",
+        `${String(consecutiveFailures)} consecutive Trench failures draining warden beads. Likely a connection or provider issue.`);
+      break;
+    }
     console.log(`=== ${String(wardenBeads.length)} warden bead(s) to fix ===`);
     const result = spawnRoleClean("trench");
     handleExit(result);
+    if (result.exitCode !== 0) {
+      consecutiveFailures++;
+    } else {
+      consecutiveFailures = 0;
+    }
   }
 }
 
@@ -773,8 +778,8 @@ function drainWardenBeads(): void {
 
 let completedSinceWarden = 0;
 
-function handleExit(result: SpawnResult): void {
-  const beadId = extractBeadId(result.output);
+function handleExit(result: SpawnResult, knownBeadId?: string): void {
+  const beadId = knownBeadId ?? extractBeadId(result.output);
 
   switch (result.exitCode) {
     case 0:
@@ -990,6 +995,7 @@ async function mainParallel(): Promise<void> {
 
   const activeSlots = new Map<number, SlotState>();
   const claimedIds = new Set<string>();
+  let consecutiveParallelFailures = 0;
 
   for (;;) {
     // Brake check
@@ -1108,19 +1114,34 @@ async function mainParallel(): Promise<void> {
       console.log(`\n=== Slot ${String(finished.slotId)} finished: bead ${finished.beadId} (exit ${String(finished.result.exitCode)}) ===`);
 
       if (finished.result.exitCode === 0) {
-        const branchName = extractBranchFromOutput(finished.result.output);
-        if (branchName) {
-          // Merge to main from the main worktree (sequential)
+        // Read branch directly from the worktree (reliable — no regex parsing)
+        let branchName: string | null = null;
+        try {
+          branchName = execFileSync("git", ["branch", "--show-current"], {
+            cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
+          }).trim() || null;
+        } catch { /* ignore */ }
+
+        if (branchName && branchName !== "main") {
           handleParallelSuccess(branchName, finished.beadId, "Completed");
         } else {
-          // Can't find branch — close bead anyway
+          console.log(`  WARNING: Could not find task branch for bead ${finished.beadId} in ${finished.worktree}. Work may not be merged.`);
           br(`close ${finished.beadId} --reason "Completed (branch not found for merge)"`);
         }
         completedSinceWarden++;
         resetAttempts(finished.beadId);
+        consecutiveParallelFailures = 0;
       } else {
         handleParallelFailure(finished.beadId);
-        handleExit(finished.result);
+        handleExit(finished.result, finished.beadId);
+        consecutiveParallelFailures++;
+        if (consecutiveParallelFailures >= 5) {
+          console.log(`=== Circuit breaker: ${String(consecutiveParallelFailures)} consecutive parallel failures. Pausing. ===`);
+          notifyChair("Parallel circuit breaker tripped",
+            `${String(consecutiveParallelFailures)} consecutive Trench failures. Likely a systemic issue.`);
+          await drainAllSlots(activeSlots);
+          break;
+        }
       }
     }
   }
