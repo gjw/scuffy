@@ -129,6 +129,9 @@ async function main(): Promise<void> {
   const overrides: Partial<AgentConfig> = {};
   if (args.workdir) overrides.workingDir = path.resolve(args.workdir);
 
+  // Scuffy repo root — used as the mail project key (consistent with summoner)
+  const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
+
   // Role-based configuration (--role flag overrides system prompt, agent name, model)
   let resolvedRole: RoleName | undefined;
   if (args.role) {
@@ -137,7 +140,6 @@ async function main(): Promise<void> {
       process.exit(1);
     }
     resolvedRole = args.role;
-    const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
     const roleConfig = getRoleConfig(resolvedRole);
     overrides.systemPrompt = loadRolePrompt(resolvedRole, repoRoot);
     overrides.agentName = roleConfig.agentName;
@@ -203,7 +205,7 @@ async function main(): Promise<void> {
   }
 
   // Create MCP callbacks (no-op when servers aren't connected)
-  const notifyHuman = createNotifyHuman(mcpServers, config.workingDir, config.agentName);
+  const notifyHuman = createNotifyHuman(mcpServers, repoRoot, config.agentName);
   const recordOutcome = createRecordOutcome(mcpServers);
 
   if (args.headless) {
