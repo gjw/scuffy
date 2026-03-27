@@ -13,6 +13,13 @@ const parameters = z.object({
       "Force-claim a specific bead by ID. Skips bv/br ranking. " +
       "Use when the summoner assigns a specific emergency bead.",
     ),
+  phaseLabel: z
+    .string()
+    .optional()
+    .describe(
+      "Filter to beads in this phase (e.g. 'phase:1-skeleton'). " +
+      "Passed by summoner to keep work gated to the current phase.",
+    ),
 });
 
 /** Run a shell command and return { ok, output }. */
@@ -127,7 +134,8 @@ export const claimBeadTool: Tool<typeof parameters> = {
     let pickId: string | null = null;
     let pickTitle: string | null = null;
 
-    const bvResult = await run("bv --robot-next 2>/dev/null", ctx.workingDir);
+    const bvLabel = params.phaseLabel ? ` --label ${params.phaseLabel}` : "";
+    const bvResult = await run(`bv --robot-next${bvLabel} 2>/dev/null`, ctx.workingDir);
     if (bvResult.ok && bvResult.output.trim().length > 0) {
       try {
         const parsed: unknown = JSON.parse(bvResult.output);

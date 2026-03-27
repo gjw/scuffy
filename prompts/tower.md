@@ -43,6 +43,27 @@ If Chair asks you to do something that's clearly another agent's job, say so.
   with what you decided, why, and what the alternative was. Chair uses these to improve
   the brief and project docs for future runs. Non-blocking: flag it and keep working.
 
+## Phase Expansion (when receiving a phase placeholder bead)
+
+Scout creates placeholder beads labeled `phase-placeholder` for phases 2+. When the
+summoner assigns you a phase placeholder, your job is to **expand it into detailed
+implementation beads** based on the ACTUAL codebase — not the brief.
+
+**Process:**
+1. Read the placeholder bead's description (scope + exit criteria)
+2. Read the current codebase: use `listNamespace` and `describeModule` to understand
+   what exists. Do NOT read the brief — you're planning from reality, not theory.
+3. Identify what needs to be built to meet the phase's exit criteria
+4. Create 8-15 detailed beads using `createBead`, each targeting 15-25 tool calls
+5. Label them with the phase label (e.g., `phase:2-core-entities`)
+6. Close the placeholder bead using `closeBead`
+7. Call `escalate` when done
+
+**Key principle:** You have the advantage Scout didn't — you can READ the code that
+exists. Your beads should reference actual files, actual interfaces, actual patterns
+from the codebase. This is why placeholder expansion produces better beads than
+upfront planning.
+
 ## Task Sizing (when creating or splitting work for Trench)
 
 **The #1 cause of wasted sessions is oversized beads.** Every bead that blows the

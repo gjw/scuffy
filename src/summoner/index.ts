@@ -245,6 +245,55 @@ function resetToMain(): void {
   }
 }
 
+// ─── Phase detection ─────────────────────────────────────────────────────────
+
+interface PhaseInfo {
+  label: string;
+  isPlaceholder: boolean;
+  placeholderId: string | null;
+}
+
+/**
+ * Detect the current active phase from open beads. Phases are labeled
+ * "phase:N-name" where N determines ordering. Returns the lowest-numbered
+ * phase that has open beads, and whether it's a placeholder awaiting Tower expansion.
+ */
+function detectCurrentPhase(beads: Bead[]): PhaseInfo | null {
+  // Collect phases from open beads
+  const phases = new Map<string, { beadCount: number; placeholderId: string | null }>();
+
+  for (const bead of beads) {
+    if (bead.status === "closed") continue;
+    const labels = bead.labels ?? [];
+    for (const label of labels) {
+      if (label.startsWith("phase:")) {
+        const entry = phases.get(label) ?? { beadCount: 0, placeholderId: null };
+        entry.beadCount++;
+        if (labels.includes("phase-placeholder")) {
+          entry.placeholderId = bead.id;
+        }
+        phases.set(label, entry);
+      }
+    }
+  }
+
+  if (phases.size === 0) return null;
+
+  // Sort by phase label (phase:1-x < phase:2-y) to get lowest numbered
+  const sorted = [...phases.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  const [label, data] = sorted[0] ?? [null, null];
+  if (!label || !data) return null;
+
+  // A phase is a "placeholder" if it has exactly one bead and that bead is the placeholder
+  const isPlaceholder = data.beadCount === 1 && data.placeholderId !== null;
+
+  return {
+    label,
+    isPlaceholder,
+    placeholderId: data.placeholderId,
+  };
+}
+
 /** Flush bead SQLite DB to git-tracked JSONL and commit if changed. */
 function syncBeadState(): void {
   try {
@@ -591,19 +640,40 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // 4. Ready beads → Trench
+    // 4. Ready beads → Trench (phase-gated)
     if (ready.length > 0) {
       // Health check: if main is broken, force-assign the emergency fix bead
       const emergencyId = ensureMainHealth();
 
-      let result: SpawnResult;
       if (emergencyId) {
-        result = spawnRoleClean("trench",
+        const result = spawnRoleClean("trench",
           `URGENT: Main has typecheck failures. Call claimBead with beadId="${emergencyId}" ` +
           `to claim the emergency fix bead. Fix the failures, then call finishBead.`);
-      } else {
-        result = spawnRoleClean("trench");
+        handleExit(result);
+        continue;
       }
+
+      // Detect current phase: find the lowest-numbered phase with open beads
+      const currentPhase = detectCurrentPhase(allBeads);
+
+      // If the current phase is a placeholder, send Tower to expand it
+      if (currentPhase?.isPlaceholder) {
+        console.log(`=== Phase placeholder detected: ${currentPhase.label}. Invoking Tower to expand. ===`);
+        spawnRoleClean("tower",
+          `Expand phase placeholder bead ${currentPhase.placeholderId}. ` +
+          `Read the bead description for scope and exit criteria. Read the current codebase ` +
+          `to understand what exists. Create 8-15 detailed implementation beads labeled ` +
+          `"${currentPhase.label}". Then close the placeholder bead using closeBead. ` +
+          `Call escalate when done.`);
+        continue;
+      }
+
+      // Normal Trench spawn with phase filter
+      const phaseArg = currentPhase ? ` Call claimBead with phaseLabel="${currentPhase.label}".` : "";
+      const result = spawnRoleClean("trench",
+        phaseArg.length > 0
+          ? `Work on the current phase.${phaseArg}`
+          : undefined);
       handleExit(result);
       continue;
     }
