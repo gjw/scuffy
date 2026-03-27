@@ -8,10 +8,18 @@ interface BeadSummary {
   phases: Array<{ name: string; total: number; closed: number }>;
 }
 
+export interface PhaseGraph {
+  label: string;
+  svg: string;
+  nodeCount: number;
+  isCurrent: boolean;
+}
+
 export interface DashboardData {
   sessions: SessionSummary[];
   beads: BeadSummary;
   mermaidGraph: string;
+  phaseGraphs?: PhaseGraph[] | undefined;
   generatedAt: string;
   /** Cost per million tokens (input, non-cached). Default $2.50 for gpt-5.4. */
   costPerMTokenIn?: number | undefined;
@@ -254,6 +262,38 @@ function renderCostBreakdown(sessions: SessionSummary[], costIn: number, costCac
   <p><small>Pricing: ${formatDollars(costIn)}/M input, ${formatDollars(costCached)}/M cached, ${formatDollars(costOut)}/M output. Top 15 by cost.</small></p>`;
 }
 
+// ─── Phase Graphs ───────────────────────────────────────────────────────────
+
+function renderPhaseGraphs(phaseGraphs?: PhaseGraph[], mermaidFallback?: string): string {
+  if (!phaseGraphs || phaseGraphs.length === 0) {
+    // Fallback to mermaid if no phase SVGs
+    if (mermaidFallback) {
+      return `<div class="graph-container"><pre class="mermaid">${mermaidFallback}</pre></div>`;
+    }
+    return "<p>No graph data available.</p>";
+  }
+
+  const defaultIdx = phaseGraphs.findIndex((g) => g.isCurrent);
+  const activeIdx = defaultIdx >= 0 ? defaultIdx : 0;
+
+  const buttons = phaseGraphs.map((g, i) => {
+    const active = i === activeIdx ? " active" : "";
+    const label = g.label.replace("phase:", "").replace(/^\d+-/, "");
+    const badge = g.isCurrent ? " \u25cf" : "";
+    return `<button class="phase-tab${active}" data-phase="${String(i)}">${escapeHtml(label)}${badge} <small>(${String(g.nodeCount)})</small></button>`;
+  });
+
+  const panels = phaseGraphs.map((g, i) => {
+    const display = i === activeIdx ? "block" : "none";
+    return `<div class="phase-panel" data-phase="${String(i)}" style="display:${display}">${g.svg}</div>`;
+  });
+
+  return `<div class="phase-graph-picker">
+    <div class="phase-tabs">${buttons.join("")}</div>
+    <div class="graph-container">${panels.join("")}</div>
+  </div>`;
+}
+
 // ─── Error Analysis ──────────────────────────────────────────────────────────
 
 function renderErrorAnalysis(sessions: SessionSummary[]): string {
@@ -367,6 +407,12 @@ export function generateDashboard(data: DashboardData): string {
   .error-grid table { font-size: 12px; }
   small { color: #8b949e; }
   a { color: #58a6ff; }
+  .phase-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .phase-tab { background: #21262d; border: 1px solid #30363d; border-radius: 6px; color: #8b949e; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+  .phase-tab:hover { color: #c9d1d9; border-color: #58a6ff; }
+  .phase-tab.active { background: #0d419d; color: #f0f6fc; border-color: #58a6ff; }
+  .phase-panel svg { max-width: 100%; height: auto; }
+  .phase-panel { min-height: 100px; }
 </style>
 </head>
 <body>
@@ -383,11 +429,7 @@ ${renderTimeline(data.sessions)}
 ${renderBeadSummary(data.beads)}
 
 <h2>Dependency Graph</h2>
-<div class="graph-container">
-  <pre class="mermaid">
-${data.mermaidGraph || "graph LR\n  empty[No graph data]"}
-  </pre>
-</div>
+${renderPhaseGraphs(data.phaseGraphs, data.mermaidGraph)}
 
 <h2>Cost Breakdown</h2>
 ${renderCostBreakdown(data.sessions, costIn, costCached, costOut)}
@@ -400,6 +442,18 @@ ${renderSessionsTable(data.sessions)}
 
 <script>
 mermaid.initialize({ startOnLoad: true, theme: 'dark' });
+
+// Phase graph tab switching
+document.querySelectorAll('.phase-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const phase = btn.dataset.phase;
+    document.querySelectorAll('.phase-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.phase-panel').forEach(p => p.style.display = 'none');
+    btn.classList.add('active');
+    const panel = document.querySelector('.phase-panel[data-phase="' + phase + '"]');
+    if (panel) panel.style.display = 'block';
+  });
+});
 
 document.querySelectorAll('#sessions-table th').forEach((th, i) => {
   th.addEventListener('click', () => {

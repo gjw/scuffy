@@ -75,105 +75,57 @@ try {
   console.log("  Could not query beads (br not available or beads not initialized)");
 }
 
-// Query mermaid graph via bv
-console.log("Generating dependency graph...");
+// Generate per-phase dependency SVGs via bv --export-graph
+console.log("Generating phase graphs...");
+import { readFileSync as readFileSyncFs } from "node:fs";
+import { tmpdir } from "node:os";
+import type { PhaseGraph } from "./generate.js";
+
+const phaseGraphs: PhaseGraph[] = [];
+const phaseLabels = beadData.phases
+  .map((p) => p.name)
+  .filter((n) => n.startsWith("phase:"))
+  .sort();
+
+// Determine current phase (lowest-numbered with open beads)
+const currentPhase = phaseLabels.find((label) => {
+  const phase = beadData.phases.find((p) => p.name === label);
+  return phase && phase.closed < phase.total;
+}) ?? phaseLabels[0] ?? null;
+
+for (const label of phaseLabels) {
+  const svgPath = path.join(tmpdir(), `bv-phase-${label.replace(/[^a-z0-9-]/gi, "_")}.svg`);
+  try {
+    execFileSync("bv", ["--export-graph", svgPath, "--label", label], {
+      cwd: workspaceDir, timeout: 15_000, stdio: ["pipe", "pipe", "pipe"],
+    });
+    const svg = readFileSyncFs(svgPath, "utf-8");
+    const nodeMatch = /(\d+) nodes/.exec(
+      execFileSync("bv", ["--export-graph", svgPath, "--label", label], {
+        cwd: workspaceDir, timeout: 15_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+      }),
+    );
+    phaseGraphs.push({
+      label,
+      svg,
+      nodeCount: nodeMatch ? Number(nodeMatch[1]) : 0,
+      isCurrent: label === currentPhase,
+    });
+    console.log(`  ${label}: OK`);
+  } catch {
+    console.log(`  ${label}: no graph`);
+  }
+}
+
+// Fallback mermaid for unlabeled beads
 let mermaidGraph = "";
-try {
-  const bvOutput = execFileSync("bv", ["--robot-graph", "--graph-format=mermaid"], {
-    cwd: workspaceDir,
-    timeout: 10_000,
-    encoding: "utf-8",
-    stdio: ["pipe", "pipe", "pipe"],
-  }).trim();
-  // bv outputs JSON with graph in a "graph" field — extract it
-  try {
-    const parsed = JSON.parse(bvOutput) as { graph?: string };
-    mermaidGraph = parsed.graph ?? bvOutput;
-  } catch {
-    mermaidGraph = bvOutput;
-  }
-} catch {
-  console.log("  Could not generate graph (bv not available)");
-}
-
-// Group graph nodes by phase using bead labels
-if (mermaidGraph && beadData.phases.length > 0) {
-  try {
-    const brOutput = execFileSync("br", ["list", "--json"], {
-      cwd: workspaceDir, timeout: 10_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
-    });
-    let allBeadsParsed: unknown = JSON.parse(brOutput);
-    if (typeof allBeadsParsed === "object" && allBeadsParsed !== null && !Array.isArray(allBeadsParsed) && "issues" in allBeadsParsed) {
-      allBeadsParsed = (allBeadsParsed as Record<string, unknown>)["issues"];
-    }
-    const allBeads = (allBeadsParsed ?? []) as Array<{ id: string; labels: string[] | null }>;
-
-    // Build phase → bead IDs mapping
-    const phaseBeads = new Map<string, string[]>();
-    for (const bead of allBeads) {
-      for (const label of bead.labels ?? []) {
-        if (label.startsWith("phase:")) {
-          const list = phaseBeads.get(label) ?? [];
-          list.push(bead.id);
-          phaseBeads.set(label, list);
-        }
-      }
-    }
-
-    // Inject subgraph blocks after the first line (graph TD)
-    const lines = mermaidGraph.split("\n");
-    const header = lines[0] ?? "graph TD";
-    const classLines = lines.filter((l) => l.trim().startsWith("classDef") || l.trim().startsWith("class "));
-    const nodeLines = lines.filter((l) => !l.trim().startsWith("classDef") && !l.trim().startsWith("class ") && l.includes("["));
-    const edgeLines = lines.filter((l) => l.includes("==>"));
-
-    const grouped: string[] = [header, ...classLines.filter((l) => l.includes("classDef"))];
-
-    for (const [phase, ids] of [...phaseBeads.entries()].sort()) {
-      const idSet = new Set(ids);
-      const phaseNodes = nodeLines.filter((l) => {
-        const match = /^\s*(\S+)\[/.exec(l);
-        return match?.[1] ? idSet.has(match[1]) : false;
-      });
-      const phaseClasses = classLines.filter((l) => {
-        const match = /class\s+(\S+)\s/.exec(l);
-        return match?.[1] ? idSet.has(match[1]) : false;
-      });
-      if (phaseNodes.length > 0) {
-        grouped.push(`    subgraph ${phase.replace("phase:", "Phase: ")}`);
-        grouped.push(...phaseNodes.map((l) => "    " + l.trim()));
-        grouped.push(...phaseClasses.map((l) => "    " + l.trim()));
-        grouped.push("    end");
-      }
-    }
-
-    // Add ungrouped nodes
-    const allGroupedIds = new Set([...phaseBeads.values()].flat());
-    const ungrouped = nodeLines.filter((l) => {
-      const match = /^\s*(\S+)\[/.exec(l);
-      return match?.[1] ? !allGroupedIds.has(match[1]) : true;
-    });
-    if (ungrouped.length > 0) {
-      grouped.push(...ungrouped);
-    }
-    const ungroupedClasses = classLines.filter((l) => {
-      const match = /class\s+(\S+)\s/.exec(l);
-      return match?.[1] ? !allGroupedIds.has(match[1]) : true;
-    });
-    grouped.push(...ungroupedClasses);
-
-    grouped.push(...edgeLines);
-    mermaidGraph = grouped.join("\n");
-  } catch {
-    // Fall back to ungrouped graph
-  }
-}
 
 // Generate HTML
 const html = generateDashboard({
   sessions,
   beads: beadData,
   mermaidGraph,
+  phaseGraphs: phaseGraphs.length > 0 ? phaseGraphs : undefined,
   generatedAt: new Date().toISOString(),
 });
 
