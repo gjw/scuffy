@@ -51,6 +51,8 @@ mkdir -p "$WORKDIR/.scuffy/sessions"
 echo "Workspace ready: $WORKDIR"
 echo "Starting summoner..."
 
-# --- Launch summoner ---
+# --- Launch summoner (tee to log file) ---
 
-exec "$SCUFFY_ROOT/scripts/summoner.sh" "$WORKDIR"
+LOGFILE="$WORKDIR/summoner.log"
+echo "Summoner log: $LOGFILE"
+"$SCUFFY_ROOT/scripts/summoner.sh" "$WORKDIR" 2>&1 | tee "$LOGFILE"
