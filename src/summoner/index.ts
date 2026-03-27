@@ -755,6 +755,11 @@ function runPhaseClose(phase: string): void {
 function drainWardenBeads(): void {
   let consecutiveFailures = 0;
   for (;;) {
+    // Check for pause
+    if (existsSync(PAUSE_FILE)) {
+      console.log("=== Paused during warden drain. ===");
+      break;
+    }
     const beads = listBeads();
     const wardenBeads = beads.filter((b) =>
       b.status !== "closed" && (b.labels ?? []).includes("warden")
