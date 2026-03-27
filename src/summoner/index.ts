@@ -774,9 +774,13 @@ function drainWardenBeads(): void {
         `${String(consecutiveFailures)} consecutive Trench failures draining warden beads. Likely a connection or provider issue.`);
       break;
     }
-    // Pick the first warden bead and force-assign it
-    const wardenBead = wardenBeads[0];
-    if (!wardenBead) break;
+    // Pick the first READY warden bead (skip those blocked by deps)
+    const readyBeadIds = new Set(readyBeads().map((b) => b.id));
+    const wardenBead = wardenBeads.find((b) => readyBeadIds.has(b.id));
+    if (!wardenBead) {
+      console.log(`=== ${String(wardenBeads.length)} warden bead(s) remain but none are ready (blocked by deps). Skipping drain. ===`);
+      break;
+    }
     console.log(`=== ${String(wardenBeads.length)} warden bead(s) to fix. Assigning ${wardenBead.id}. ===`);
     br(`update ${wardenBead.id} --claim --no-auto-flush`);
     const result = spawnRoleClean("trench",
