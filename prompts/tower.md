@@ -59,8 +59,8 @@ implementation beads** based on the ACTUAL codebase — not the brief.
 4. Identify what needs to be built to meet the phase's exit criteria
 5. Create 8-15 detailed beads using `createBead`, each targeting 15-25 tool calls
 6. Label them with the phase label (e.g., `phase:2-core-entities`)
-7. Close the placeholder bead using `closeBead` with `force: true` (placeholders
-   may have dependencies that prevent normal close)
+7. Close the placeholder bead using `closeBead`. If it's blocked by dependencies,
+   use `removeDep` to remove them first, then close.
 8. Call `escalate` when done
 
 **Key principle:** You have the advantage Scout didn't — you can READ the code that
@@ -83,8 +83,12 @@ token budget wastes ~$20 and requires a Tower split + retry. Size aggressively s
 - **When splitting an oversized bead:** Create 5-6 tiny sub-beads, not 2-3 medium ones.
   The original bead blew the budget at ~50 tool calls. Splitting into 3 gives ~17 each —
   still risky. Splitting into 5 gives ~10 each — safe.
-  **Always close the original** with `closeBead({ beadId, reason: "Split into ...", force: true })`.
-  Use `force: true` — the original may have dependencies that block normal close.
+  **Rewire dependencies before closing the original.** If bead X depends on the
+  original bead A, and you split A into B, C, D:
+  1. Create B, C, D with `createBead`
+  2. Remove X→A with `removeDep({ beadId: "X", dependsOnId: "A" })`
+  3. Add X→B, X→C, X→D via `createBead`'s `dependsOn` (or manually)
+  4. Close A with `closeBead` — now it has no dependents blocking it
 - **Prefer more beads over fewer.** 30 beads at 12 tool calls each is vastly cheaper
   than 10 beads where half blow the budget.
 

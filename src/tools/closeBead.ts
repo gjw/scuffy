@@ -15,7 +15,6 @@ function run(command: string, cwd: string): Promise<{ ok: boolean; output: strin
 const parameters = z.object({
   beadId: z.string().describe("ID of the bead to close."),
   reason: z.string().describe("Why the bead is being closed (e.g. 'Split into sub-beads', 'Superseded by X', 'No longer needed')."),
-  force: z.boolean().optional().describe("Close even if blocked by open dependencies. Use when splitting a bead into replacements."),
 });
 
 export const closeBeadTool: Tool<typeof parameters> = {
@@ -27,9 +26,8 @@ export const closeBeadTool: Tool<typeof parameters> = {
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
     const reasonEscaped = params.reason.replace(/'/g, "'\\''");
-    const forceFlag = params.force ? " --force" : "";
     const result = await run(
-      `br close --no-auto-flush${forceFlag} ${params.beadId} --reason='${reasonEscaped}'`,
+      `br close --no-auto-flush ${params.beadId} --reason='${reasonEscaped}'`,
       ctx.workingDir,
     );
 
