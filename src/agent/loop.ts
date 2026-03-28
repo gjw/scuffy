@@ -116,11 +116,18 @@ export async function runAgentLoop(
         continue;
       }
 
+      // If the agent has a claimed bead but exits with a text response
+      // (without calling finishBead), treat it as an escalation — the agent
+      // gave up or got confused. Without this, the summoner treats exit 0 as
+      // success, tries to merge an empty branch, and loops forever.
+      const exitCode = session.claimedBeadId !== null ? 1 : undefined;
+
       return {
         response: responseText,
         tokensUsed,
         toolCallCount,
         durationMs: Date.now() - startTime,
+        exitCode,
       };
     }
 
@@ -188,12 +195,14 @@ export async function runAgentLoop(
     }
   }
 
-  // maxIterations exceeded or unexpected stop
+  // maxIterations exceeded or unexpected stop — exit as failure so summoner
+  // doesn't treat this as a successful completion and try to merge an empty branch.
   return {
     response: "Error: agent loop exceeded maximum iterations or encountered an unexpected state.",
     tokensUsed,
     toolCallCount,
     durationMs: Date.now() - startTime,
+    exitCode: 2,
   };
 }
 
