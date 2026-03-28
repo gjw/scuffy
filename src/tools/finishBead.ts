@@ -283,12 +283,27 @@ export const finishBeadTool: Tool<typeof parameters> = {
     if (branchName && branchName !== "main" && !isBypass) {
       const mergeMain = await run("git merge main --no-edit", ctx.workingDir);
       if (!mergeMain.ok) {
-        return {
-          content:
-            `Merge conflict with main:\n\n${mergeMain.output.slice(0, 500)}\n\n` +
-            `Your branch has diverged from main. Resolve conflicts and retry finishBead.`,
-          isError: true,
-        };
+        // Auto-resolve conflicts in bead metadata files — these are tracking
+        // state managed by the summoner on main, not code the agent owns.
+        const conflictFiles = await run("git diff --name-only --diff-filter=U", ctx.workingDir);
+        const conflicting = conflictFiles.output.trim().split("\n").filter(Boolean);
+        const metadataFiles = [".beads/issues.jsonl", ".beads/config.yaml", ".summoner-attempts"];
+        const onlyMetadata = conflicting.length > 0 && conflicting.every((f) => metadataFiles.includes(f));
+
+        if (onlyMetadata) {
+          // Take main's version for all metadata files and complete the merge
+          for (const f of conflicting) {
+            await run(`git checkout --theirs ${JSON.stringify(f)} && git add ${JSON.stringify(f)}`, ctx.workingDir);
+          }
+          await run("git commit --no-edit", ctx.workingDir);
+        } else {
+          return {
+            content:
+              `Merge conflict with main:\n\n${mergeMain.output.slice(0, 500)}\n\n` +
+              `Your branch has diverged from main. Resolve conflicts and retry finishBead.`,
+            isError: true,
+          };
+        }
       }
 
       // Re-run quality checks after integrating main (no-op in single-Trench,
