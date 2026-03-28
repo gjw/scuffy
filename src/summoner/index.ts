@@ -1196,13 +1196,32 @@ async function mainParallel(): Promise<void> {
         claimedIds.add(bead.id);
         const wt = ensureWorktree(slotId);
 
-        // Deterministic branch creation — summoner owns the branch, not the agent
+        // Deterministic branch creation — summoner owns the branch, not the agent.
+        // Use plain checkout if the branch already has commits (retry after escalation)
+        // to preserve previous work. Only use -B (reset) for fresh branches.
         const branchName = `task/${bead.id}-${slugify(bead.title)}`;
         let branchCreated = false;
         try {
-          execFileSync("git", ["checkout", "-B", branchName], {
-            cwd: wt, timeout: 10_000, stdio: "pipe",
-          });
+          // Check if branch already has commits beyond main
+          let branchHasWork = false;
+          try {
+            const ahead = execFileSync("git", ["rev-list", "--count", `main..${branchName}`], {
+              cwd: wt, timeout: 10_000, encoding: "utf-8", stdio: "pipe",
+            }).trim();
+            branchHasWork = Number(ahead) > 0;
+          } catch {
+            // Branch doesn't exist yet — that's fine, we'll create it
+          }
+
+          if (branchHasWork) {
+            execFileSync("git", ["checkout", branchName], {
+              cwd: wt, timeout: 10_000, stdio: "pipe",
+            });
+          } else {
+            execFileSync("git", ["checkout", "-B", branchName], {
+              cwd: wt, timeout: 10_000, stdio: "pipe",
+            });
+          }
           branchCreated = true;
         } catch {
           // Branch may be checked out in another worktree. Skip this bead.

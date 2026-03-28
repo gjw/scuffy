@@ -289,6 +289,13 @@ Zod schemas are the source of truth for shared types.
 
    Work and commit on this branch. finishBead merges to main automatically.
 
+   **Important:** In parallel mode, `finishBead` first commits your work, then
+   merges the latest `main` INTO your branch and re-runs quality checks against
+   the merged result. If checks fail after the merge, your code is fine — the
+   failure is an integration conflict with work another Trench landed on main
+   while you were working. Fix the integration issues (usually import mismatches
+   or type conflicts from new code on main) and call `finishBead` again.
+
 2. **Claim the issue:**
 
    ```bash
