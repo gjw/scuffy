@@ -407,24 +407,40 @@ function ensureWorktree(slot: number): string {
 
 /**
  * Merge a Trench's completed branch into main from the main worktree.
- * Returns true if merge succeeded, false if conflict.
+ * Returns "merged" if new commits were introduced, "noop" if the branch
+ * was already fully merged (no new commits), or "conflict" on failure.
  */
-function mergeToMain(branchName: string): boolean {
+function mergeToMain(branchName: string): "merged" | "noop" | "conflict" {
   try {
+    // Record HEAD before merge to detect no-op (already-merged) branches
+    const headBefore = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: WORKDIR, encoding: "utf-8", timeout: 5_000,
+    }).trim();
+
     execFileSync(
       "git",
       ["merge", branchName, "--no-edit"],
       { cwd: WORKDIR, timeout: 30_000, stdio: "pipe" },
     );
+
+    const headAfter = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: WORKDIR, encoding: "utf-8", timeout: 5_000,
+    }).trim();
+
+    if (headBefore === headAfter) {
+      console.error(`  WARNING: Merge of ${branchName} was a no-op (already merged). Work may have been lost.`);
+      return "noop";
+    }
+
     console.log(`  Merged ${branchName} to main.`);
-    return true;
+    return "merged";
   } catch {
     // Merge conflict — abort and report
     try {
       execFileSync("git", ["merge", "--abort"], { cwd: WORKDIR, timeout: 5_000, stdio: "pipe" });
     } catch { /* ignore */ }
     console.error(`  Merge conflict: ${branchName} could not be merged to main.`);
-    return false;
+    return "conflict";
   }
 }
 
@@ -432,12 +448,16 @@ function mergeToMain(branchName: string): boolean {
  * After a successful Trench exit in parallel mode: merge branch, close bead, sync.
  */
 function handleParallelSuccess(branchName: string, beadId: string, summary: string): void {
-  const merged = mergeToMain(branchName);
-  if (!merged) {
+  const mergeResult = mergeToMain(branchName);
+  if (mergeResult === "conflict") {
     // Merge conflict — the work is good, main just changed under it.
     // Release to open for retry. On the next attempt, the Trench starts
     // from updated main and the conflict resolves naturally.
     console.log(`  Merge conflict for ${beadId} — releasing for retry on updated main.`);
+    br(`update ${beadId} --status=open --no-auto-flush`);
+  } else if (mergeResult === "noop") {
+    // Branch was already merged — stale branch detected. Don't close bead.
+    console.error(`  Stale branch ${branchName} for bead ${beadId} — releasing for retry.`);
     br(`update ${beadId} --status=open --no-auto-flush`);
   } else {
     br(`close ${beadId} --reason ${JSON.stringify(summary)}`);
@@ -583,7 +603,8 @@ async function drainAllSlots(slots: Map<number, SlotState>): Promise<void> {
     const finished = await waitForOneSlot(slots);
     console.log(`  Slot ${String(finished.slotId)} finished (bead ${finished.beadId}, exit ${String(finished.result.exitCode)})`);
     if (finished.result.exitCode === 0) {
-      const branchName = extractBranchFromOutput(finished.result.output);
+      const branchName = readBranchFromExitFile(finished.worktree)
+        ?? extractBranchFromOutput(finished.result.output);
       if (branchName) {
         handleParallelSuccess(branchName, finished.beadId, "Completed");
       }
@@ -592,6 +613,22 @@ async function drainAllSlots(slots: Map<number, SlotState>): Promise<void> {
     }
     handleExit(finished.result);
   }
+}
+
+/** Read branch from the structured exit file written by headless.ts. */
+function readBranchFromExitFile(worktreePath: string): string | null {
+  const slotLabel = path.basename(worktreePath);
+  try {
+    const exitFileSlot = path.join(worktreePath, ".scuffy", `exit-${slotLabel}.json`);
+    const exitFileGeneric = path.join(worktreePath, ".scuffy", "exit.json");
+    const exitFilePath = existsSync(exitFileSlot) ? exitFileSlot : exitFileGeneric;
+    const exitMeta: unknown = JSON.parse(readFileSync(exitFilePath, "utf-8"));
+    if (typeof exitMeta === "object" && exitMeta !== null && "branch" in exitMeta) {
+      const branch = (exitMeta as Record<string, unknown>)["branch"];
+      return typeof branch === "string" && branch.length > 0 ? branch : null;
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
 /** Extract branch name from Trench output (finishBead includes it in metadata). */
@@ -1148,55 +1185,30 @@ async function mainParallel(): Promise<void> {
       console.log(`\n=== Slot ${String(finished.slotId)} finished: bead ${finished.beadId} (exit ${String(finished.result.exitCode)}) ===`);
 
       if (finished.result.exitCode === 0) {
-        // Read structured exit metadata (written by headless.ts)
-        const slotLabel = path.basename(finished.worktree);
-        let branchName: string | null = null;
-        try {
-          // Try slot-specific exit file first, then generic
-          const exitFileSlot = path.join(finished.worktree, ".scuffy", `exit-${slotLabel}.json`);
-          const exitFileGeneric = path.join(finished.worktree, ".scuffy", "exit.json");
-          const exitFilePath = existsSync(exitFileSlot) ? exitFileSlot : exitFileGeneric;
-          console.log(`  Reading exit file: ${exitFilePath} (exists: ${String(existsSync(exitFilePath))})`);
-          const exitMeta: unknown = JSON.parse(readFileSync(exitFilePath, "utf-8"));
-          if (typeof exitMeta === "object" && exitMeta !== null && "branch" in exitMeta) {
-            branchName = (exitMeta as Record<string, unknown>)["branch"] as string | null;
-          }
-        } catch {
-          // Fallback: read branch directly from worktree
+        // Read branch from exit file, then fall back to current HEAD only.
+        // NO branch scanning — picking a stale branch merges the wrong code silently.
+        let branchName = readBranchFromExitFile(finished.worktree);
+        if (branchName) {
+          console.log(`  Exit file reports branch: ${branchName}`);
+        } else {
+          // Exit file missing or has no branch — try current HEAD
           try {
             branchName = execFileSync("git", ["branch", "--show-current"], {
               cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
             }).trim() || null;
-          } catch { /* ignore */ }
-          if (!branchName) {
-            try {
-              const branches = execFileSync("git", ["branch", "--sort=-committerdate"], {
-                cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
-              }).trim();
-              branchName = branches.split("\n")
-                .map((b) => b.trim().replace(/^\* /, ""))
-                .find((b) => b.startsWith("task/")) ?? null;
-            } catch { /* ignore */ }
-          }
-        }
-
-        // Also try: find any task/ branch in the worktree by listing branches
-        if (!branchName || branchName === "main") {
-          try {
-            const branches = execFileSync("git", ["branch", "--sort=-committerdate"], {
-              cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
-            }).trim();
-            const taskBranch = branches.split("\n")
-              .map((b) => b.trim().replace(/^\* /, ""))
-              .find((b) => b.startsWith("task/"));
-            if (taskBranch) branchName = taskBranch;
+            if (branchName) console.log(`  Detected branch from worktree HEAD: ${branchName}`);
           } catch { /* ignore */ }
         }
 
         if (branchName && branchName !== "main") {
-          const merged = mergeToMain(branchName);
-          if (merged) {
+          const mergeResult = mergeToMain(branchName);
+          if (mergeResult === "merged") {
             br(`close ${finished.beadId} --reason "Completed"`);
+            br("sync --flush-only");
+          } else if (mergeResult === "noop") {
+            // Stale/already-merged branch — work was lost. Release for retry.
+            console.error(`  Stale branch ${branchName} for bead ${finished.beadId} — releasing for retry.`);
+            br(`update ${finished.beadId} --status=open --no-auto-flush`);
             br("sync --flush-only");
           } else {
             // Merge conflict — spawn a focused Trench to resolve it
@@ -1208,8 +1220,12 @@ async function mainParallel(): Promise<void> {
             handleExit(resolveResult, finished.beadId);
           }
         } else {
-          console.log(`  WARNING: Could not find task branch for bead ${finished.beadId}. Work may not be merged.`);
-          br(`close ${finished.beadId} --reason "Completed (branch not found for merge)"`);
+          // No branch found — agent worked in detached HEAD or never created a branch.
+          // Do NOT close the bead as "Completed" — the work can't be merged.
+          // Release for retry so it gets a fresh attempt with a proper branch.
+          console.error(`  WARNING: No task branch found for bead ${finished.beadId}. Releasing for retry.`);
+          br(`update ${finished.beadId} --status=open --no-auto-flush`);
+          br("sync --flush-only");
         }
         completedSinceWarden++;
         resetAttempts(finished.beadId);

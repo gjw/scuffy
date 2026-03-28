@@ -37,10 +37,10 @@ workspaceDir = path.resolve(workspaceDir);
 function fetchBeadData(_sessions: SessionSummary[]): DashboardData["beads"] {
   const beadData = { total: 0, open: 0, closed: 0, inProgress: 0, phases: [] as Array<{ name: string; total: number; closed: number }> };
   try {
-    const openOutput = execFileSync("br", ["list", "--json"], {
+    const openOutput = execFileSync("br", ["list", "--json", "--limit", "0"], {
       cwd: workspaceDir, timeout: 10_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
     });
-    const closedOutput = execFileSync("br", ["list", "--status=closed", "--json"], {
+    const closedOutput = execFileSync("br", ["list", "--status=closed", "--json", "--limit", "0"], {
       cwd: workspaceDir, timeout: 10_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
     });
 
