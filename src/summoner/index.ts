@@ -10,6 +10,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, createWriteStream } from "node:fs";
 import path from "node:path";
+import { formatJudicarPrompt, gatherRecentGitLog, type TriageFailureContext } from "./judicar.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -802,6 +803,54 @@ function towerReviewBead(beadId: string): void {
     `Call escalate when done.`);
 }
 
+/**
+ * Spawn a Judicar to make a triage decision about a failed bead.
+ * The Judicar reads the context, acts via br commands, and exits.
+ * Falls back to Tower if SCUFFY_USE_JUDICAR is not set.
+ */
+function judicarTriageFailure(beadId: string, result: SpawnResult, attemptCount: number): void {
+  if (process.env["SCUFFY_USE_JUDICAR"] !== "1") {
+    // Feature flag off — use legacy Tower path
+    if (result.exitCode === 2) {
+      splitBead(beadId);
+    } else {
+      towerReviewBead(beadId);
+    }
+    return;
+  }
+
+  // Gather bead info
+  let beadTitle = beadId;
+  let beadPriority = 2;
+  let beadLabels: string[] = [];
+  try {
+    const beadJson = br(`show ${beadId} --json`);
+    const parsed: unknown = JSON.parse(beadJson);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const bead = parsed[0] as Record<string, unknown>;
+      beadTitle = (bead["title"] as string) ?? beadId;
+      beadPriority = (bead["priority"] as number) ?? 2;
+      beadLabels = (bead["labels"] as string[]) ?? [];
+    }
+  } catch { /* use defaults */ }
+
+  const ctx: TriageFailureContext = {
+    type: "TRIAGE_FAILURE",
+    beadId,
+    beadTitle,
+    beadPriority,
+    beadLabels,
+    attemptCount,
+    exitCode: result.exitCode,
+    failureOutput: result.output,
+    recentGitLog: gatherRecentGitLog(WORKDIR),
+  };
+
+  const prompt = formatJudicarPrompt(ctx);
+  console.log(`=== Spawning Judicar to triage ${beadId} ===`);
+  spawnRoleClean("judicar", prompt);
+}
+
 function haltBead(beadId: string): void {
   console.log(`=== Bead ${beadId} failed 3 times. Halting. ===`);
   notifyChair(`HALTED: ${beadId}`, `Bead ${beadId} failed 3 times and has been halted. Manual intervention needed.`);
@@ -883,7 +932,7 @@ function handleExit(result: SpawnResult, knownBeadId?: string): void {
         if (count >= 3) {
           haltBead(beadId);
         } else if (count >= 2) {
-          towerReviewBead(beadId);
+          judicarTriageFailure(beadId, result, count);
         }
       }
       break;
@@ -896,7 +945,7 @@ function handleExit(result: SpawnResult, knownBeadId?: string): void {
         if (count >= 3) {
           haltBead(beadId);
         } else {
-          splitBead(beadId);
+          judicarTriageFailure(beadId, result, count);
         }
       } else {
         console.log("  Could not identify bead from output.");
