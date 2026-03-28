@@ -83,25 +83,29 @@ export const claimBeadTool: Tool<typeof parameters> = {
       await run("br init", ctx.workingDir);
     }
 
+    // Deterministic path: summoner pre-assigned bead via env var
+    const envBeadId = process.env["SCUFFY_BEAD_ID"];
+    const effectiveBeadId = params.beadId ?? envBeadId;
+
     // Force-claim path: summoner assigned a specific bead (e.g., emergency fix)
-    if (params.beadId) {
-      const claim = await run(`br update ${params.beadId} --claim`, ctx.workingDir);
+    if (effectiveBeadId) {
+      const claim = await run(`br update ${effectiveBeadId} --claim`, ctx.workingDir);
       if (!claim.ok) {
-        return { content: `Failed to claim ${params.beadId}: ${claim.output}`, isError: true };
+        return { content: `Failed to claim ${effectiveBeadId}: ${claim.output}`, isError: true };
       }
-      ctx.setClaimedBeadId(params.beadId);
+      ctx.setClaimedBeadId(effectiveBeadId);
       ctx.log({
         type: "bead_claim",
         timestamp: new Date().toISOString(),
-        beadId: params.beadId,
-        title: "(force-assigned)",
+        beadId: effectiveBeadId,
+        title: envBeadId ? "(env-assigned)" : "(force-assigned)",
       });
-      const details = await run(`br show ${params.beadId} --json`, ctx.workingDir);
+      const details = await run(`br show ${effectiveBeadId} --json`, ctx.workingDir);
 
       // Query CASS for this specific task
       let cassContext = "";
       const cassResult = await run(
-        `cm context ${JSON.stringify(params.beadId)} --workspace ${JSON.stringify(ctx.workingDir)} --json 2>/dev/null`,
+        `cm context ${JSON.stringify(effectiveBeadId)} --workspace ${JSON.stringify(ctx.workingDir)} --json 2>/dev/null`,
         ctx.workingDir,
       );
       if (cassResult.ok) {
@@ -126,7 +130,7 @@ export const claimBeadTool: Tool<typeof parameters> = {
       }
 
       return {
-        content: `Claimed bead ${params.beadId} (force-assigned)\n\n${details.ok ? details.output : "(no details available)"}${cassContext}`,
+        content: `Claimed bead ${effectiveBeadId}${envBeadId ? " (env-assigned)" : " (force-assigned)"}\n\n${details.ok ? details.output : "(no details available)"}${cassContext}`,
       };
     }
 

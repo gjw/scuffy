@@ -25,6 +25,16 @@ const WORKTREES_DIR = path.join(WORKDIR, ".worktrees");
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Generate a short branch-safe slug from a bead title. */
+function slugify(title: string, maxLen = 40): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, maxLen)
+    .replace(/-$/, "");
+}
+
 function br(args: string): string {
   try {
     return execFileSync("/bin/sh", ["-c", `br ${args}`], {
@@ -62,7 +72,7 @@ interface Bead {
 }
 
 function listBeads(): Bead[] {
-  return brJson("list") as Bead[];
+  return brJson("list --limit 0") as Bead[];
 }
 
 function readyBeads(): Bead[] {
@@ -524,6 +534,7 @@ function spawnRoleClean(role: string, instruction?: string, worktreePath?: strin
 interface SlotState {
   slotId: number;
   beadId: string;
+  branchName: string;
   worktree: string;
   promise: Promise<SpawnResult>;
 }
@@ -532,7 +543,12 @@ interface SlotState {
  * Spawn a Trench asynchronously in a worktree. Returns a promise that resolves
  * when the process exits. Non-blocking — multiple can run concurrently.
  */
-function spawnRoleAsync(role: string, instruction: string | undefined, worktreePath: string): Promise<SpawnResult> {
+interface SpawnEnv {
+  branchName?: string;
+  beadId?: string;
+}
+
+function spawnRoleAsync(role: string, instruction: string | undefined, worktreePath: string, extra?: SpawnEnv): Promise<SpawnResult> {
   const workdir = worktreePath;
   const slotLabel = path.basename(worktreePath);
   console.log(`\n=== Spawning Scuffy as ${role} [${slotLabel}] ===`);
@@ -548,11 +564,19 @@ function spawnRoleAsync(role: string, instruction: string | undefined, worktreeP
 
   const logFile = path.join(WORKDIR, ".scuffy", `last-session-${slotLabel}.log`);
 
+  const spawnEnv: Record<string, string> = {
+    ...process.env as Record<string, string>,
+    SCUFFY_PARALLEL: "1",
+    SCUFFY_SLOT_ID: slotLabel,
+  };
+  if (extra?.branchName) spawnEnv["SCUFFY_BRANCH"] = extra.branchName;
+  if (extra?.beadId) spawnEnv["SCUFFY_BEAD_ID"] = extra.beadId;
+
   return new Promise((resolve) => {
     const logStream = createWriteStream(logFile);
     const child = spawn("/bin/bash", ["-c",
       `SCUFFY_PARALLEL=1 node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1`],
-      { cwd: SCUFFY_ROOT, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, SCUFFY_PARALLEL: "1", SCUFFY_SLOT_ID: slotLabel } },
+      { cwd: SCUFFY_ROOT, stdio: ["ignore", "pipe", "pipe"], env: spawnEnv },
     );
 
     let output = "";
@@ -584,11 +608,11 @@ function spawnRoleAsync(role: string, instruction: string | undefined, worktreeP
 /**
  * Wait for any one slot to finish. Returns the finished slot.
  */
-async function waitForOneSlot(slots: Map<number, SlotState>): Promise<{ slotId: number; beadId: string; worktree: string; result: SpawnResult }> {
+async function waitForOneSlot(slots: Map<number, SlotState>): Promise<{ slotId: number; beadId: string; branchName: string; worktree: string; result: SpawnResult }> {
   const entries = [...slots.entries()];
   const result = await Promise.race(
     entries.map(([id, state]) =>
-      state.promise.then((r) => ({ slotId: id, beadId: state.beadId, worktree: state.worktree, result: r })),
+      state.promise.then((r) => ({ slotId: id, beadId: state.beadId, branchName: state.branchName, worktree: state.worktree, result: r })),
     ),
   );
   slots.delete(result.slotId);
@@ -603,11 +627,8 @@ async function drainAllSlots(slots: Map<number, SlotState>): Promise<void> {
     const finished = await waitForOneSlot(slots);
     console.log(`  Slot ${String(finished.slotId)} finished (bead ${finished.beadId}, exit ${String(finished.result.exitCode)})`);
     if (finished.result.exitCode === 0) {
-      const branchName = readBranchFromExitFile(finished.worktree)
-        ?? extractBranchFromOutput(finished.result.output);
-      if (branchName) {
-        handleParallelSuccess(branchName, finished.beadId, "Completed");
-      }
+      // Use deterministic branch name from slot state
+      handleParallelSuccess(finished.branchName, finished.beadId, "Completed");
     } else {
       handleParallelFailure(finished.beadId);
     }
@@ -657,6 +678,18 @@ function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id:
     }
     if (!Array.isArray(rawReady)) return null;
     const ready = rawReady as Array<{ id: string; title: string; issue_type: string; priority: number; labels: string[] | null }>;
+
+    // br ready doesn't include labels — enrich from br list which does
+    const allBeads = listBeads();
+    const labelMap = new Map<string, string[]>();
+    for (const b of allBeads) {
+      labelMap.set(b.id, b.labels ?? []);
+    }
+    for (const b of ready) {
+      if (b.labels === null || b.labels === undefined) {
+        b.labels = labelMap.get(b.id) ?? [];
+      }
+    }
 
     // Filter: not already claimed, not emergency P0 bugs (handled separately),
     // not beads with 2+ failed attempts, not phase placeholders,
@@ -1162,12 +1195,29 @@ async function mainParallel(): Promise<void> {
 
         claimedIds.add(bead.id);
         const wt = ensureWorktree(slotId);
+
+        // Deterministic branch creation — summoner owns the branch, not the agent
+        const branchName = `task/${bead.id}-${slugify(bead.title)}`;
+        let branchCreated = false;
+        try {
+          execFileSync("git", ["checkout", "-B", branchName], {
+            cwd: wt, timeout: 10_000, stdio: "pipe",
+          });
+          branchCreated = true;
+        } catch {
+          // Branch may be checked out in another worktree. Skip this bead.
+          console.error(`  Branch ${branchName} unavailable for slot ${String(slotId)} (likely in use by another slot). Skipping.`);
+          claimedIds.add(bead.id); // keep in claimed set so we don't retry it this cycle
+        }
+        if (!branchCreated) continue;
+
         const phaseArg = currentPhase ? ` Call claimBead with phaseLabel="${currentPhase.label}".` : "";
         const promise = spawnRoleAsync("trench",
           `Work on bead ${bead.id}: ${bead.title}.${phaseArg}` +
+          ` You are on branch \`${branchName}\`. Do NOT create a new branch.` +
           ` Call claimBead with beadId="${bead.id}" to register your session.`,
-          wt);
-        activeSlots.set(slotId, { slotId, beadId: bead.id, worktree: wt, promise });
+          wt, { branchName, beadId: bead.id });
+        activeSlots.set(slotId, { slotId, beadId: bead.id, branchName, worktree: wt, promise });
         console.log(`  Slot ${String(slotId)}: bead ${bead.id} — ${bead.title.slice(0, 50)}`);
       }
     }
@@ -1185,47 +1235,26 @@ async function mainParallel(): Promise<void> {
       console.log(`\n=== Slot ${String(finished.slotId)} finished: bead ${finished.beadId} (exit ${String(finished.result.exitCode)}) ===`);
 
       if (finished.result.exitCode === 0) {
-        // Read branch from exit file, then fall back to current HEAD only.
-        // NO branch scanning — picking a stale branch merges the wrong code silently.
-        let branchName = readBranchFromExitFile(finished.worktree);
-        if (branchName) {
-          console.log(`  Exit file reports branch: ${branchName}`);
-        } else {
-          // Exit file missing or has no branch — try current HEAD
-          try {
-            branchName = execFileSync("git", ["branch", "--show-current"], {
-              cwd: finished.worktree, encoding: "utf-8", timeout: 5_000,
-            }).trim() || null;
-            if (branchName) console.log(`  Detected branch from worktree HEAD: ${branchName}`);
-          } catch { /* ignore */ }
-        }
-
-        if (branchName && branchName !== "main") {
-          const mergeResult = mergeToMain(branchName);
-          if (mergeResult === "merged") {
-            br(`close ${finished.beadId} --reason "Completed"`);
-            br("sync --flush-only");
-          } else if (mergeResult === "noop") {
-            // Stale/already-merged branch — work was lost. Release for retry.
-            console.error(`  Stale branch ${branchName} for bead ${finished.beadId} — releasing for retry.`);
-            br(`update ${finished.beadId} --status=open --no-auto-flush`);
-            br("sync --flush-only");
-          } else {
-            // Merge conflict — spawn a focused Trench to resolve it
-            console.log(`  Merge conflict for ${branchName}. Spawning resolution Trench.`);
-            const resolveResult = spawnRoleClean("trench",
-              `MERGE CONFLICT: Branch ${branchName} (bead ${finished.beadId}) cannot merge to main cleanly. ` +
-              `Checkout main, run git merge ${branchName}, resolve ALL conflicts, run npm run typecheck to verify, ` +
-              `commit the merge, then call finishBead with beadId="${finished.beadId}".`);
-            handleExit(resolveResult, finished.beadId);
-          }
-        } else {
-          // No branch found — agent worked in detached HEAD or never created a branch.
-          // Do NOT close the bead as "Completed" — the work can't be merged.
-          // Release for retry so it gets a fresh attempt with a proper branch.
-          console.error(`  WARNING: No task branch found for bead ${finished.beadId}. Releasing for retry.`);
+        // Branch is known deterministically — summoner created it before spawn.
+        const branchName = finished.branchName;
+        console.log(`  Merging branch: ${branchName}`);
+        const mergeResult = mergeToMain(branchName);
+        if (mergeResult === "merged") {
+          br(`close ${finished.beadId} --reason "Completed"`);
+          br("sync --flush-only");
+        } else if (mergeResult === "noop") {
+          // Agent completed but didn't commit to the branch. Release for retry.
+          console.error(`  No new commits on ${branchName} for bead ${finished.beadId} — releasing for retry.`);
           br(`update ${finished.beadId} --status=open --no-auto-flush`);
           br("sync --flush-only");
+        } else {
+          // Merge conflict — spawn a focused Trench to resolve it
+          console.log(`  Merge conflict for ${branchName}. Spawning resolution Trench.`);
+          const resolveResult = spawnRoleClean("trench",
+            `MERGE CONFLICT: Branch ${branchName} (bead ${finished.beadId}) cannot merge to main cleanly. ` +
+            `Checkout main, run git merge ${branchName}, resolve ALL conflicts, run npm run typecheck to verify, ` +
+            `commit the merge, then call finishBead with beadId="${finished.beadId}".`);
+          handleExit(resolveResult, finished.beadId);
         }
         completedSinceWarden++;
         resetAttempts(finished.beadId);

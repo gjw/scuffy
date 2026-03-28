@@ -16,12 +16,27 @@ const parameters = z.object({
     .describe("Timeout in milliseconds. Default 30000 (30s), max 300000 (5m)."),
 });
 
+/** Git write subcommands blocked in parallel mode. Reads (status, diff, log, show, ls-files) are allowed. */
+const GIT_WRITE_PATTERN = /\bgit\s+(checkout|switch|merge|rebase|reset|clean|stash|push|pull|fetch|commit|add|rm|mv|cherry-pick|revert)\b|\bgit\s+branch\s+(?!--show-current|--list|-a\b|-r\b|-v\b)|\bgit\s+tag\s+(?!-l\b|--list)/;
+
 export const bashTool: Tool<typeof parameters> = {
   name: "bash",
   description:
     "Execute a shell command and capture its output. " + "Returns exit code, stdout, and stderr.",
   parameters,
   async execute(params: z.infer<typeof parameters>, ctx: ToolContext): Promise<ToolResult> {
+    // In parallel mode, block git write operations — summoner and tools own all git writes.
+    // Read-only git (status, diff, log, show, branch --show-current) is allowed.
+    if (process.env["SCUFFY_PARALLEL"] === "1" && GIT_WRITE_PATTERN.test(params.command)) {
+      return {
+        content:
+          "Git write operations are not available in parallel mode. " +
+          "Branch creation, commits, and merges are handled by the summoner and finishBead tool. " +
+          "Read-only git commands (status, diff, log, show) are allowed.",
+        isError: true,
+      };
+    }
+
     // DCG guard — block destructive commands before execution
     const dcg = await checkDcg(params.command, ctx.workingDir);
     if (!dcg.allowed) {

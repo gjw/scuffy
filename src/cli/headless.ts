@@ -153,12 +153,15 @@ export async function runHeadless(
 
   // Write structured exit metadata for the summoner to read
   try {
-    let branch: string | null = null;
-    try {
-      branch = execFileSync("git", ["branch", "--show-current"], {
-        cwd: config.workingDir, encoding: "utf-8", timeout: 5_000,
-      }).trim() || null;
-    } catch { /* ignore */ }
+    // Prefer SCUFFY_BRANCH (deterministic, set by summoner) over git detection
+    let branch: string | null = process.env["SCUFFY_BRANCH"] ?? null;
+    if (!branch) {
+      try {
+        branch = execFileSync("git", ["branch", "--show-current"], {
+          cwd: config.workingDir, encoding: "utf-8", timeout: 5_000,
+        }).trim() || null;
+      } catch { /* ignore */ }
+    }
 
     const isBypass = result.response.includes("(bypass)");
     const exitMeta: ExitMetadata = {
