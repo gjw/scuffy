@@ -77,13 +77,17 @@ export async function runAgentLoop(
     tokensUsed.cacheRead += response.usage.cacheReadTokens;
     tokensUsed.cacheWrite += response.usage.cacheWriteTokens;
 
-    // Token budget guard: auto-escalate before hitting provider limit
-    if (tokensUsed.in >= config.tokenBudget) {
+    // Token budget guard: auto-escalate before hitting provider limit.
+    // Check CONVERSATION LENGTH (this call's input), not cumulative across calls.
+    // Cumulative grows quadratically with tool calls and is a cost metric, not a
+    // capacity metric. The model can keep working as long as the conversation fits
+    // in the context window.
+    if (response.usage.inputTokens >= config.tokenBudget) {
       session.messages.push({ role: "assistant", content: response.content });
       const claimedBead = session.claimedBeadId ?? "unknown";
       return {
         response:
-          `BUDGET_EXCEEDED bead=${claimedBead} tools=${String(toolCallCount)} tokens=${String(tokensUsed.in)}/${String(config.tokenBudget)}. ` +
+          `BUDGET_EXCEEDED bead=${claimedBead} tools=${String(toolCallCount)} tokens=${String(response.usage.inputTokens)}/${String(config.tokenBudget)}. ` +
           `Auto-escalating to prevent provider limit crash.`,
         tokensUsed,
         toolCallCount,
