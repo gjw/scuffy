@@ -8,7 +8,7 @@ import path from "node:path";
  * a default instruction, and an optional model override for heavier tasks.
  */
 
-export type RoleName = "scout" | "trench" | "tower" | "warden-light" | "warden-dark";
+export type RoleName = "scout" | "trench" | "tower" | "warden-light" | "warden-dark" | "judicar";
 
 export interface RoleConfig {
   /** System prompt file path relative to repo root prompts/ dir. */
@@ -69,6 +69,13 @@ const ROLES: Record<RoleName, RoleConfig> = {
       "Adversarial audit of recent work. Challenge assumptions, find bugs, " +
       "test edge cases, look for missing error handling and security issues. " +
       "Create beads for issues found. Call escalate when done auditing.",
+  },
+  judicar: {
+    promptFile: "prompts/judicar.md",
+    agentName: "SteadyJudicar",
+    defaultInstruction:
+      "Read the triage context provided. Make a judgment call: " +
+      "retry, split, defer, or close. Act via br commands. Then call escalate.",
   },
 };
 

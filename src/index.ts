@@ -137,7 +137,7 @@ async function main(): Promise<void> {
   let resolvedRole: RoleName | undefined;
   if (args.role) {
     if (!isValidRole(args.role)) {
-      console.error(`Unknown role: ${args.role}. Valid roles: scout, trench, tower, warden-light, warden-dark`);
+      console.error(`Unknown role: ${args.role}. Valid roles: scout, trench, tower, warden-light, warden-dark, judicar`);
       process.exit(1);
     }
     resolvedRole = args.role;
