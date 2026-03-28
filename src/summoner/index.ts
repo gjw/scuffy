@@ -1201,9 +1201,9 @@ async function mainParallel(): Promise<void> {
         // to preserve previous work. Only use -B (reset) for fresh branches.
         const branchName = `task/${bead.id}-${slugify(bead.title)}`;
         let branchCreated = false;
+        let branchHasWork = false;
         try {
           // Check if branch already has commits beyond main
-          let branchHasWork = false;
           try {
             const ahead = execFileSync("git", ["rev-list", "--count", `main..${branchName}`], {
               cwd: wt, timeout: 10_000, encoding: "utf-8", stdio: "pipe",
@@ -1231,10 +1231,15 @@ async function mainParallel(): Promise<void> {
         if (!branchCreated) continue;
 
         const phaseArg = currentPhase ? ` Call claimBead with phaseLabel="${currentPhase.label}".` : "";
+        const retryHint = branchHasWork
+          ? ` NOTE: A previous Trench already implemented this bead but finishBead` +
+            ` rejected it due to integration failures after merging main. The code` +
+            ` is likely done — check for type/test failures, fix them, and call finishBead.`
+          : "";
         const promise = spawnRoleAsync("trench",
           `Work on bead ${bead.id}: ${bead.title}.${phaseArg}` +
           ` You are on branch \`${branchName}\`. Do NOT create a new branch.` +
-          ` Call claimBead with beadId="${bead.id}" to register your session.`,
+          ` Call claimBead with beadId="${bead.id}" to register your session.${retryHint}`,
           wt, { branchName, beadId: bead.id });
         activeSlots.set(slotId, { slotId, beadId: bead.id, branchName, worktree: wt, promise });
         console.log(`  Slot ${String(slotId)}: bead ${bead.id} — ${bead.title.slice(0, 50)}`);
