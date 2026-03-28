@@ -10,7 +10,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, createWriteStream } from "node:fs";
 import path from "node:path";
-import { formatJudicarPrompt, gatherRecentGitLog, type TriageFailureContext } from "./judicar.js";
+import { formatJudicarPrompt, gatherRecentGitLog, gatherOpenBeads, type TriageFailureContext } from "./judicar.js";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -857,6 +857,92 @@ function haltBead(beadId: string): void {
   br(`update ${beadId} --labels=blocked --no-auto-flush`);
 }
 
+/**
+ * Spawn Judicar to filter warden-proposed beads.
+ * Judicar reviews open warden-labeled beads and may close, reprioritize, or approve them.
+ */
+function judicarTriageWarden(): void {
+  const beads = listBeads();
+  const wardenBeads = beads.filter((b) =>
+    b.status !== "closed" && (b.labels ?? []).includes("warden")
+  );
+  if (wardenBeads.length === 0) return;
+
+  const proposed = wardenBeads.map((b) => {
+    let description = "";
+    try {
+      const detail = br(`show ${b.id} --json`);
+      const parsed: unknown = JSON.parse(detail);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        description = ((parsed[0] as Record<string, unknown>)["description"] as string ?? "").slice(0, 200);
+      }
+    } catch { /* use empty */ }
+    return {
+      id: b.id,
+      title: b.title,
+      priority: b.priority,
+      description,
+    };
+  });
+
+  // Get the warden's summary from the last session output
+  const wardenSummary = "(See warden audit output above)";
+
+  const ctx = {
+    type: "TRIAGE_WARDEN" as const,
+    wardenSummary,
+    proposedBeads: proposed,
+    currentSlice: null,
+  };
+
+  const prompt = formatJudicarPrompt(ctx);
+  console.log(`=== Spawning Judicar to filter ${String(wardenBeads.length)} warden bead(s) ===`);
+  spawnRoleClean("judicar", prompt);
+}
+
+/**
+ * Spawn Judicar to check if the build is truly complete.
+ * Returns true if Judicar confirms done, false if it created new beads.
+ */
+function judicarTriageComplete(): boolean {
+  const openBeads = gatherOpenBeads(WORKDIR);
+  const gitLog = gatherRecentGitLog(WORKDIR);
+
+  // Quick curl check of key endpoints
+  let curlResults = "";
+  const endpoints = [
+    "/health",
+    "/programs?workspaceId=workspace-demo&limit=5&offset=0",
+    "/people?workspaceId=workspace-demo&limit=5&offset=0",
+  ];
+  for (const ep of endpoints) {
+    try {
+      const out = execFileSync("curl", ["-s", "-o", "/dev/null", "-w", "%{http_code}", `http://localhost:3000${ep}`], {
+        timeout: 5000,
+        encoding: "utf-8",
+      }).trim();
+      curlResults += `GET ${ep} → ${out}\n`;
+    } catch {
+      curlResults += `GET ${ep} → (curl failed)\n`;
+    }
+  }
+
+  const ctx = {
+    type: "TRIAGE_COMPLETE" as const,
+    openBeads,
+    recentGitLog: gitLog,
+    curlResults,
+  };
+
+  const prompt = formatJudicarPrompt(ctx);
+  console.log("=== Spawning Judicar to verify build completion ===");
+  spawnRoleClean("judicar", prompt);
+
+  // Check if Judicar created any new beads
+  const afterBeads = readyBeads();
+  return afterBeads.length === 0;
+}
+
 // ─── Phase close sequence ────────────────────────────────────────────────────
 
 function runPhaseClose(phase: string): void {
@@ -1133,6 +1219,16 @@ async function main(): Promise<void> {
     }
 
     // 4. Nothing to do
+    if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
+      console.log("No beads ready. Spawning Judicar to verify completion.");
+      const isDone = judicarTriageComplete();
+      if (isDone) {
+        console.log("Judicar confirms build is complete.");
+        break;
+      }
+      console.log("Judicar created new beads. Continuing.");
+      continue;
+    }
     console.log("No beads ready. Done.");
     break;
   }
@@ -1200,8 +1296,19 @@ async function mainParallel(): Promise<void> {
       claimedIds.clear();
       console.log(`\n=== ${String(completedSinceWarden)} beads completed since last audit. Running Warden. ===`);
       spawnRoleClean("warden-dark", `Audit the last ${String(completedSinceWarden)} completed beads. Focus on code quality, test coverage, and integration issues.`);
+
+      // Judicar filters warden beads before draining
+      if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
+        judicarTriageWarden();
+      }
+
       drainWardenBeads();
       spawnRoleClean("warden-light", `Review the last ${String(completedSinceWarden)} completed beads for polish, cleanup, and documentation.`);
+
+      if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
+        judicarTriageWarden();
+      }
+
       drainWardenBeads();
       completedSinceWarden = 0;
       continue;
@@ -1295,8 +1402,18 @@ async function mainParallel(): Promise<void> {
       }
     }
 
-    // Nothing to spawn and nothing running → done
+    // Nothing to spawn and nothing running → check if truly done
     if (activeSlots.size === 0 && ready.length === 0) {
+      if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
+        console.log("No beads ready. Spawning Judicar to verify completion.");
+        const isDone = judicarTriageComplete();
+        if (isDone) {
+          console.log("Judicar confirms build is complete.");
+          break;
+        }
+        console.log("Judicar created new beads. Continuing.");
+        continue;
+      }
       console.log("No beads ready. Done.");
       break;
     }
