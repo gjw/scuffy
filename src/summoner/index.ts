@@ -352,6 +352,18 @@ function detectCurrentPhase(beads: Bead[]): PhaseInfo | null {
 /** Flush bead SQLite DB to git-tracked JSONL and commit if changed. */
 function syncBeadState(): void {
   try {
+    // Resolve .beads JSONL merge conflicts before syncing.
+    // SQLite is authoritative — if the JSONL has conflict markers, nuke it
+    // and let br sync regenerate it cleanly.
+    const jsonlPath = path.join(WORKDIR, ".beads", "issues.jsonl");
+    if (existsSync(jsonlPath)) {
+      const content = readFileSync(jsonlPath, "utf-8");
+      if (content.includes("<<<<<<<") || content.includes(">>>>>>>")) {
+        console.log("  [resolving .beads/issues.jsonl merge conflict — regenerating from SQLite]");
+        writeFileSync(jsonlPath, "");
+      }
+    }
+
     br("sync --flush-only");
     const beadStatus = execFileSync("git", ["status", "--porcelain", ".beads/"], {
       cwd: WORKDIR,
@@ -482,7 +494,29 @@ function mergeToMain(branchName: string): "merged" | "noop" | "conflict" {
     console.log(`  Merged ${branchName} to main.`);
     return "merged";
   } catch {
-    // Merge conflict — abort and report
+    // Check if the only conflict is .beads/ — auto-resolve it since SQLite is authoritative
+    try {
+      const conflicted = execFileSync("git", ["diff", "--name-only", "--diff-filter=U"], {
+        cwd: WORKDIR, encoding: "utf-8", timeout: 5_000,
+      }).trim();
+      const conflictedFiles = conflicted.split("\n").filter((f) => f.length > 0);
+      const allBeadsConflicts = conflictedFiles.length > 0 && conflictedFiles.every((f) => f.startsWith(".beads/"));
+
+      if (allBeadsConflicts) {
+        // Auto-resolve: accept ours for .beads files (SQLite is truth, JSONL will be regenerated)
+        for (const f of conflictedFiles) {
+          execFileSync("git", ["checkout", "--ours", f], { cwd: WORKDIR, timeout: 5_000, stdio: "pipe" });
+          execFileSync("git", ["add", f], { cwd: WORKDIR, timeout: 5_000, stdio: "pipe" });
+        }
+        execFileSync("git", ["commit", "--no-edit"], { cwd: WORKDIR, timeout: 10_000, stdio: "pipe" });
+        console.log(`  Merged ${branchName} to main (auto-resolved .beads conflict).`);
+        // Regenerate JSONL from SQLite
+        syncBeadState();
+        return "merged";
+      }
+    } catch { /* fall through to abort */ }
+
+    // Real merge conflict — abort and report
     try {
       execFileSync("git", ["merge", "--abort"], { cwd: WORKDIR, timeout: 5_000, stdio: "pipe" });
     } catch { /* ignore */ }
