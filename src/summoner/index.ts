@@ -1520,10 +1520,20 @@ async function mainParallel(): Promise<void> {
         handleExit(finished.result, finished.beadId);
         consecutiveParallelFailures++;
         if (consecutiveParallelFailures >= 5) {
-          console.log(`=== Circuit breaker: ${String(consecutiveParallelFailures)} consecutive parallel failures. Pausing. ===`);
+          console.log(`=== Circuit breaker: ${String(consecutiveParallelFailures)} consecutive parallel failures. ===`);
           notifyChair("Parallel circuit breaker tripped",
             `${String(consecutiveParallelFailures)} consecutive Trench failures. Likely a systemic issue.`);
           await drainAllSlots(activeSlots);
+          claimedIds.clear();
+          // Don't exit — check if Judicar created new work, then continue
+          const beadsAfter = listBeads();
+          const readyAfter = readyBeads();
+          if (readyAfter.length > 0) {
+            console.log(`  Circuit breaker: ${String(readyAfter.length)} ready bead(s) found after failures. Resetting and continuing.`);
+            consecutiveParallelFailures = 0;
+            continue;
+          }
+          console.log("  Circuit breaker: no ready beads. Stopping.");
           break;
         }
       }

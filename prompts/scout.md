@@ -148,9 +148,11 @@ The smoke test bead description must include:
    - API endpoints return expected shapes
    - Auth flows work (login, check session, logout)
    - Navigation links resolve (curl each route, check for 200)
-4. **Fix anything broken**: if a curl returns 404 or wrong content, fix it
-   before calling finishBead. Missing files (like index.html), wrong ports,
-   missing plugins — these are all fixable in this bead.
+4. **Fix anything broken**: if a curl returns 404 or wrong content, **fix it
+   yourself** before calling finishBead. This includes schema/seed mismatches,
+   missing files (like index.html), wrong ports, missing plugins, broken wiring
+   between API and web. You ARE allowed to modify code in this bead — that is
+   the whole point. Do not escalate integration bugs. Fix them.
 5. **Write a runnable verification script**: save it as `scripts/smoke-phase-N.sh`
    so it can be re-run later
 6. **Write a Playwright test manifest**: save it as `tests/e2e/phase-N.spec.txt`.
