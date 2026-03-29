@@ -941,6 +941,8 @@ function judicarTriageFailure(beadId: string, result: SpawnResult, attemptCount:
   const prompt = formatJudicarPrompt(ctx);
   console.log(`=== Spawning Judicar to triage ${beadId} ===`);
   spawnRoleClean("judicar", prompt);
+  // Reset attempt counter so the bead (or its splits) can actually be retried
+  resetAttempts(beadId);
 }
 
 function haltBead(beadId: string): void {
@@ -1335,6 +1337,7 @@ async function mainParallel(): Promise<void> {
   const activeSlots = new Map<number, SlotState>();
   const claimedIds = new Set<string>();
   let consecutiveParallelFailures = 0;
+  let judicarCompletionAttempts = 0;
 
   for (;;) {
     // Brake check
@@ -1476,7 +1479,12 @@ async function mainParallel(): Promise<void> {
     // (halted after max attempts, emergency P0 bugs with healthy main, etc.)
     if (activeSlots.size === 0) {
       if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
-        console.log("No beads ready. Spawning Judicar to verify completion.");
+        judicarCompletionAttempts++;
+        if (judicarCompletionAttempts > 3) {
+          console.log("Judicar loop cap reached (3 attempts with no progress). Stopping.");
+          break;
+        }
+        console.log(`No beads ready. Spawning Judicar to verify completion (attempt ${String(judicarCompletionAttempts)}/3).`);
         const isDone = judicarTriageComplete();
         if (isDone) {
           console.log("Judicar confirms build is complete.");
@@ -1488,6 +1496,8 @@ async function mainParallel(): Promise<void> {
       console.log("No beads ready. Done.");
       break;
     }
+    // Reset Judicar attempt counter when real work happens
+    judicarCompletionAttempts = 0;
 
     // Wait for any slot to finish
     if (activeSlots.size > 0) {

@@ -114,7 +114,11 @@ function formatCompletePrompt(ctx: TriageCompleteContext): string {
     `Recent git log:\n${ctx.recentGitLog}\n\n` +
     `Demo flow check:\n${ctx.curlResults}\n\n` +
     `Decide: confirm done, or create beads for missing work. ` +
-    `Act via br commands, then exit.`
+    `Act via br commands, then exit.\n\n` +
+    `CRITICAL: Do NOT close phase placeholder beads (labeled "phase-placeholder"). ` +
+    `Those are expanded by Tower, not by you. If you see open placeholders, the build ` +
+    `is NOT done — there are still phases to expand and implement. Only confirm done ` +
+    `if no placeholders remain and all implemented phases pass their acceptance criteria.`
   );
 }
 

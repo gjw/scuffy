@@ -115,6 +115,14 @@ unnecessary and break the summoner's phase gating.
 - Basic navigation/routing shell
 - Health check endpoint
 
+**Environment self-sufficiency:** Each bead description must include any environment
+setup the Trench needs to run its own tests and verify its work. Don't assume the
+Trench will discover connection strings, ports, or credentials by reading docker-compose
+files. If a bead touches postgres, tell it the DATABASE_URL. If it needs to curl an
+API, tell it how to start the server. Write a `.env` file in the workspace during
+scaffold setup and reference it in CLAUDE.md so every agent inherits it. Trenches
+should be able to work from the bead description + CLAUDE.md alone.
+
 **Size rules — THE CONTEXT TAX:**
 
 Agents spend ~50% of their tool calls just READING before they write anything
@@ -140,8 +148,15 @@ the app and hitting it.
 
 The smoke test bead description must include:
 
-1. **Start the stack**: `docker compose up -d postgres`, `npm run db:seed -w api`,
-   then start the dev server (or use `npm run dev` if concurrently is set up)
+1. **Start the stack**: `docker compose up -d postgres`, then start the API
+   as a background process:
+   ```bash
+   DATABASE_URL=postgresql://ship:ship@localhost:5432/ship npm run dev -w api &
+   API_PID=$!
+   sleep 3
+   ```
+   Then seed: `DATABASE_URL=postgresql://ship:ship@localhost:5432/ship npm run db:seed -w api`
+   Kill the API when done: `kill $API_PID`
 2. **Wait for ready**: curl health endpoint until it responds
 3. **Verify every acceptance criterion** via curl/fetch:
    - HTML pages return 200 and contain expected content (not 404, not empty)
