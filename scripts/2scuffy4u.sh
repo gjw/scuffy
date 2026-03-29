@@ -25,6 +25,7 @@ if [[ -f .env ]]; then
   done < .env
 fi
 
-export SCUFFY_PARALLEL_SLOTS=2
+export SCUFFY_PARALLEL_SLOTS="${SCUFFY_PARALLEL_SLOTS:-3}"
+export SCUFFY_USE_JUDICAR=1
 
 exec npx tsx src/summoner/index.ts "$WORKSPACE" 2>&1 | tee "$WORKSPACE/summoner.log"

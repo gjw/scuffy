@@ -8,7 +8,7 @@
  */
 
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, createWriteStream } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, createWriteStream, appendFileSync } from "node:fs";
 import path from "node:path";
 import { formatJudicarPrompt, gatherRecentGitLog, gatherOpenBeads, type TriageFailureContext } from "./judicar.js";
 
@@ -20,9 +20,37 @@ const MAIL_URL = process.env["AGENT_MAIL_URL"] ?? "http://127.0.0.1:8765/mcp";
 const PROJECT_KEY = SCUFFY_ROOT;
 const PAUSE_FILE = path.join(WORKDIR, ".pause");
 const ATTEMPTS_FILE = path.join(WORKDIR, ".summoner-attempts");
-const WARDEN_INTERVAL = 8; // Run Warden audit every N completed beads
+// Warden runs at phase boundaries only (in runPhaseClose), not on a bead count interval.
 const MAX_PARALLEL_SLOTS = Number(process.env["SCUFFY_PARALLEL_SLOTS"] ?? "1");
 const WORKTREES_DIR = path.join(WORKDIR, ".worktrees");
+
+// ─── Logging ────────────────────────────────────────────────────────────────
+//
+// Intercept console.log/error to write to summoner.log directly, bypassing
+// tee pipe buffering. All summoner output (including child process stdout)
+// goes through this so the log file is always complete and current.
+
+const LOG_FILE = path.join(WORKDIR, "summoner.log");
+
+const origLog = console.log.bind(console);
+const origError = console.error.bind(console);
+
+console.log = (...args: unknown[]) => {
+  const line = args.map(String).join(" ");
+  origLog(line);
+  try { appendFileSync(LOG_FILE, line + "\n"); } catch { /* ignore */ }
+};
+
+console.error = (...args: unknown[]) => {
+  const line = args.map(String).join(" ");
+  origError(line);
+  try { appendFileSync(LOG_FILE, line + "\n"); } catch { /* ignore */ }
+};
+
+/** Write text to the log file (for child process output piping). */
+function writeLog(text: string): void {
+  try { appendFileSync(LOG_FILE, text); } catch { /* ignore */ }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -278,7 +306,8 @@ interface PhaseInfo {
  * phase that has open beads, and whether it's a placeholder awaiting Tower expansion.
  */
 function detectCurrentPhase(beads: Bead[]): PhaseInfo | null {
-  // Collect phases from open beads
+  // Collect phases from open beads, grouping by phase NUMBER (not full label).
+  // "phase:1-skeleton" and "phase:1-auth" both map to phase number "1".
   const phases = new Map<string, { beadCount: number; placeholderId: string | null }>();
 
   for (const bead of beads) {
@@ -286,22 +315,29 @@ function detectCurrentPhase(beads: Bead[]): PhaseInfo | null {
     const labels = bead.labels ?? [];
     for (const label of labels) {
       if (label.startsWith("phase:")) {
-        const entry = phases.get(label) ?? { beadCount: 0, placeholderId: null };
+        // Extract phase number: "phase:1-skeleton" → "1", "phase:2" → "2"
+        const numMatch = /^phase:(\d+)/.exec(label);
+        if (!numMatch?.[1]) continue;
+        const phaseNum = numMatch[1];
+        const entry = phases.get(phaseNum) ?? { beadCount: 0, placeholderId: null };
         entry.beadCount++;
         if (labels.includes("phase-placeholder")) {
           entry.placeholderId = bead.id;
         }
-        phases.set(label, entry);
+        phases.set(phaseNum, entry);
       }
     }
   }
 
   if (phases.size === 0) return null;
 
-  // Sort by phase label (phase:1-x < phase:2-y) to get lowest numbered
-  const sorted = [...phases.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  const [label, data] = sorted[0] ?? [null, null];
-  if (!label || !data) return null;
+  // Sort by phase number to get the lowest
+  const sorted = [...phases.entries()].sort((a, b) => Number(a[0]) - Number(b[0]));
+  const [phaseNum, data] = sorted[0] ?? [null, null];
+  if (!phaseNum || !data) return null;
+
+  // Canonical label is "phase:N" — preClaimBead uses prefix matching
+  const label = `phase:${phaseNum}`;
 
   // A phase is a "placeholder" if it has exactly one bead and that bead is the placeholder
   const isPlaceholder = data.beadCount === 1 && data.placeholderId !== null;
@@ -508,17 +544,17 @@ function spawnRoleClean(role: string, instruction?: string, worktreePath?: strin
 
   const logFile = path.join(WORKDIR, ".scuffy", "last-session.log");
 
-  // Set SCUFFY_PARALLEL for worktree spawns so finishBead/escalate skip merge/close
-  const envPrefix = worktreePath ? "SCUFFY_PARALLEL=1 " : "";
-
-  // Use shell to tee output and capture exit code
-  const cmd = `${envPrefix}node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1 | tee '${logFile}'; exit \${PIPESTATUS[0]}`;
+  const spawnEnv: Record<string, string> = {
+    ...process.env as Record<string, string>,
+  };
+  if (worktreePath) spawnEnv["SCUFFY_PARALLEL"] = "1";
 
   try {
-    execFileSync("/bin/bash", ["-c", cmd], {
+    execFileSync("node", args, {
       cwd: SCUFFY_ROOT,
       stdio: "inherit",
       timeout: 600_000, // 10 minute max per session
+      env: spawnEnv,
     });
     // Exit 0
     const output = existsSync(logFile) ? readFileSync(logFile, "utf-8") : "";
@@ -574,9 +610,8 @@ function spawnRoleAsync(role: string, instruction: string | undefined, worktreeP
   if (extra?.beadId) spawnEnv["SCUFFY_BEAD_ID"] = extra.beadId;
 
   return new Promise((resolve) => {
-    const logStream = createWriteStream(logFile);
-    const child = spawn("/bin/bash", ["-c",
-      `SCUFFY_PARALLEL=1 node ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(" ")} 2>&1`],
+    const slotLogStream = createWriteStream(logFile);
+    const child = spawn("node", args,
       { cwd: SCUFFY_ROOT, stdio: ["ignore", "pipe", "pipe"], env: spawnEnv },
     );
 
@@ -584,18 +619,22 @@ function spawnRoleAsync(role: string, instruction: string | undefined, worktreeP
     child.stdout?.on("data", (data: Buffer) => {
       const text = data.toString();
       output += text;
-      process.stdout.write(`[${slotLabel}] ${text}`);
-      logStream.write(text);
+      const prefixed = `[${slotLabel}] ${text}`;
+      process.stdout.write(prefixed);
+      slotLogStream.write(text);
+      writeLog(prefixed);
     });
     child.stderr?.on("data", (data: Buffer) => {
       const text = data.toString();
       output += text;
-      process.stderr.write(`[${slotLabel}] ${text}`);
-      logStream.write(text);
+      const prefixed = `[${slotLabel}] ${text}`;
+      process.stderr.write(prefixed);
+      slotLogStream.write(text);
+      writeLog(prefixed);
     });
 
     child.on("close", (code) => {
-      logStream.end();
+      slotLogStream.end();
       resolve({ exitCode: code ?? 1, output });
     });
 
@@ -617,7 +656,22 @@ async function waitForOneSlot(slots: Map<number, SlotState>): Promise<{ slotId: 
     ),
   );
   slots.delete(result.slotId);
+  // Detach the worktree so the branch is released for reuse by other slots
+  detachWorktree(result.worktree);
   return result;
+}
+
+/** Detach a worktree back to HEAD so its branch is released. */
+function detachWorktree(wtPath: string): void {
+  try {
+    execFileSync("git", ["checkout", "--detach"], {
+      cwd: wtPath,
+      timeout: 10_000,
+      stdio: "pipe",
+    });
+  } catch {
+    // Non-fatal — ensureWorktree will handle it on next use
+  }
 }
 
 /**
@@ -703,9 +757,10 @@ function preClaimBead(phaseLabel: string | null, excludeIds: Set<string>): { id:
       const labels = b.labels ?? [];
       if (labels.includes("phase-placeholder")) return false;
       // Phase gating: pick beads from the current phase OR unlabeled beads
-      // (emergency fixes, warden beads, conflict resolution have no phase label)
+      // (emergency fixes, warden beads, conflict resolution have no phase label).
+      // Uses prefix matching: phaseLabel "phase:1" matches "phase:1", "phase:1-skeleton", etc.
       const hasAnyPhaseLabel = labels.some((l) => l.startsWith("phase:"));
-      if (phaseLabel && hasAnyPhaseLabel && !labels.includes(phaseLabel)) return false;
+      if (phaseLabel && hasAnyPhaseLabel && !labels.some((l) => l.startsWith(phaseLabel))) return false;
       return true;
     });
     if (eligible.length === 0) return null;
@@ -754,24 +809,27 @@ function recoverStaleBeads(): void {
 
 function closingPhase(): string | null {
   const beads = listBeads();
+  // Group by phase NUMBER, not full label (e.g. "phase:1-skeleton" → "1")
   const phaseMap = new Map<string, { total: number; open: number; hasWarden: boolean }>();
 
   for (const bead of beads) {
     const labels = bead.labels ?? [];
     for (const label of labels) {
-      if (label.startsWith("phase:")) {
-        const entry = phaseMap.get(label) ?? { total: 0, open: 0, hasWarden: false };
+      const numMatch = /^phase:(\d+)/.exec(label);
+      if (numMatch?.[1]) {
+        const phaseNum = numMatch[1];
+        const entry = phaseMap.get(phaseNum) ?? { total: 0, open: 0, hasWarden: false };
         entry.total++;
         if (bead.status !== "closed") entry.open++;
         if (labels.includes("warden")) entry.hasWarden = true;
-        phaseMap.set(label, entry);
+        phaseMap.set(phaseNum, entry);
       }
     }
   }
 
-  for (const [phase, data] of phaseMap) {
+  for (const [phaseNum, data] of phaseMap) {
     if (data.open === 0 && !data.hasWarden && data.total > 0) {
-      return phase;
+      return `phase:${phaseNum}`;
     }
   }
   return null;
@@ -948,9 +1006,18 @@ function judicarTriageComplete(): boolean {
 function runPhaseClose(phase: string): void {
   console.log(`=== Phase closing: ${phase} ===`);
 
+  // Warden-dark: code quality, test coverage, integration issues
   spawnRoleClean("warden-dark", `Audit phase ${phase}. Focus on code completed with label ${phase}.`);
+  if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
+    judicarTriageWarden();
+  }
   drainWardenBeads();
+
+  // Warden-light: polish, cleanup, documentation
   spawnRoleClean("warden-light", `Audit phase ${phase}. Focus on code completed with label ${phase}.`);
+  if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
+    judicarTriageWarden();
+  }
   drainWardenBeads();
 
   console.log(`=== Phase ${phase} closed. Invoking Tower for replan. ===`);
@@ -998,7 +1065,6 @@ function drainWardenBeads(): void {
 
 // ─── Exit handling ───────────────────────────────────────────────────────────
 
-let completedSinceWarden = 0;
 
 function handleExit(result: SpawnResult, knownBeadId?: string): void {
   const beadId = knownBeadId ?? extractBeadId(result.output);
@@ -1006,7 +1072,6 @@ function handleExit(result: SpawnResult, knownBeadId?: string): void {
   switch (result.exitCode) {
     case 0:
       console.log("=== Bead complete. ===");
-      completedSinceWarden++;
       if (beadId) resetAttempts(beadId);
       break;
 
@@ -1152,16 +1217,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    // 3. Warden audit if enough beads completed since last audit
-    if (completedSinceWarden >= WARDEN_INTERVAL) {
-      console.log(`\n=== ${String(completedSinceWarden)} beads completed since last audit. Running Warden. ===`);
-      spawnRoleClean("warden-dark", `Audit the last ${String(completedSinceWarden)} completed beads. Focus on code quality, test coverage, and integration issues.`);
-      drainWardenBeads();
-      spawnRoleClean("warden-light", `Review the last ${String(completedSinceWarden)} completed beads for polish, cleanup, and documentation.`);
-      drainWardenBeads();
-      completedSinceWarden = 0;
-      continue;
-    }
+    // 3. Warden audit — removed. Warden now runs only at phase boundaries.
 
     // 4. Ready beads → Trench (phase-gated)
     if (ready.length > 0) {
@@ -1290,29 +1346,8 @@ async function mainParallel(): Promise<void> {
       continue;
     }
 
-    // 3. Warden audit (run alone)
-    if (completedSinceWarden >= WARDEN_INTERVAL) {
-      await drainAllSlots(activeSlots);
-      claimedIds.clear();
-      console.log(`\n=== ${String(completedSinceWarden)} beads completed since last audit. Running Warden. ===`);
-      spawnRoleClean("warden-dark", `Audit the last ${String(completedSinceWarden)} completed beads. Focus on code quality, test coverage, and integration issues.`);
-
-      // Judicar filters warden beads before draining
-      if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
-        judicarTriageWarden();
-      }
-
-      drainWardenBeads();
-      spawnRoleClean("warden-light", `Review the last ${String(completedSinceWarden)} completed beads for polish, cleanup, and documentation.`);
-
-      if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
-        judicarTriageWarden();
-      }
-
-      drainWardenBeads();
-      completedSinceWarden = 0;
-      continue;
-    }
+    // 3. Warden audit — removed. Warden now runs only at phase boundaries
+    //    via runPhaseClose(), triggered by closingPhase() in step 2.
 
     // 4. Ready beads → fill parallel Trench slots
     if (ready.length > 0) {
@@ -1446,7 +1481,6 @@ async function mainParallel(): Promise<void> {
             `commit the merge, then call finishBead with beadId="${finished.beadId}".`);
           handleExit(resolveResult, finished.beadId);
         }
-        completedSinceWarden++;
         resetAttempts(finished.beadId);
         consecutiveParallelFailures = 0;
 

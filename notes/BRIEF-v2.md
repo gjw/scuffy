@@ -35,8 +35,15 @@ polish." Failure to include them from the start is a build failure.
    think Bloomberg terminal meets clean web app. Neutral slate/gray palette with
    program colors as accents.
 
-2. **Vite dev proxy.** Configure in `vite.config.ts` in Slice 1:
+2. **Vite + React setup.** The web app requires `web/index.html` (with a `<div id="root">`
+   and `<script type="module" src="/src/main.tsx">`), `@vitejs/plugin-react` (v4 for
+   Vite 6 compat), and `@tailwindcss/vite` in `vite.config.ts`. The API listens on
+   port 3000. Configure Vite dev proxy in `vite.config.ts` in Slice 1:
    ```typescript
+   import react from '@vitejs/plugin-react';
+   import tailwindcss from '@tailwindcss/vite';
+   // ...
+   plugins: [react(), tailwindcss()],
    server: {
      proxy: {
        '/api': 'http://localhost:3000',

@@ -104,7 +104,9 @@ this example. A complex app might have 5-6 phases. A simple one might have 3.
 Create 8-10 small, focused beads for Phase 1 only. These are the walking skeleton:
 enough to deploy something real.
 
-Label them `phase:1-<name>` (e.g., `phase:1-skeleton`).
+Label them `phase:1` (just the number — all Phase 1 beads share the same label).
+Dependencies already encode execution order within a phase, so sub-labels are
+unnecessary and break the summoner's phase gating.
 
 **Phase 1 typically includes:**
 - Deploy configuration (so it's deployable from the start)
@@ -129,13 +131,42 @@ for actual implementation. Size accordingly:
 - **Name files explicitly** in the description: "Create `api/src/routes/programs.ts`
   and `api/src/routes/programs.test.ts`" — this helps the agent avoid exploration
 
+**MANDATORY: Phase smoke test bead**
+
+The LAST bead of every phase must be a smoke test. This bead depends on ALL other
+beads in the phase. Its job is to start the full stack and verify the phase's
+acceptance criteria work end-to-end — not with unit tests, but by actually running
+the app and hitting it.
+
+The smoke test bead description must include:
+
+1. **Start the stack**: `docker compose up -d postgres`, `npm run db:seed -w api`,
+   then start the dev server (or use `npm run dev` if concurrently is set up)
+2. **Wait for ready**: curl health endpoint until it responds
+3. **Verify every acceptance criterion** via curl/fetch:
+   - HTML pages return 200 and contain expected content (not 404, not empty)
+   - API endpoints return expected shapes
+   - Auth flows work (login, check session, logout)
+   - Navigation links resolve (curl each route, check for 200)
+4. **Fix anything broken**: if a curl returns 404 or wrong content, fix it
+   before calling finishBead. Missing files (like index.html), wrong ports,
+   missing plugins — these are all fixable in this bead.
+5. **Write a runnable verification script**: save it as `scripts/smoke-phase-N.sh`
+   so it can be re-run later
+
+Title pattern: `"Smoke test: verify phase N acceptance criteria end-to-end"`
+
+This bead catches integration gaps that unit tests miss: missing HTML entrypoints,
+port mismatches, broken proxies, routes that 404, pages that render blank.
+Without this bead, a phase can "pass" while being completely non-functional.
+
 ### 7. Create placeholder beads for phases 2-N
 
 For each remaining phase, create a SINGLE bead with:
 - Title: `"Phase N: <phase name>"`
 - Type: `task`
 - Priority: the phase number (P1 for phase 2, P2 for phase 3, etc.)
-- Labels: `["phase:N-<name>", "phase-placeholder"]`
+- Labels: `["phase:N", "phase-placeholder"]`
 - Description: the one-paragraph scope + exit criteria from step 5
 - Dependencies: depends on ALL beads in the previous phase (or the previous placeholder)
 
@@ -158,7 +189,7 @@ createBead({
   description: "Create Express routes for...",
   priority: 0,
   type: "task",
-  labels: ["phase:1-skeleton"],
+  labels: ["phase:1"],
   dependsOn: ["<scaffold-bead-id>"]
 })
 ```

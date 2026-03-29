@@ -58,10 +58,17 @@ implementation beads** based on the ACTUAL codebase — not the brief.
    what exists. Plan from reality AND the brief — you need both.
 4. Identify what needs to be built to meet the phase's exit criteria
 5. Create 8-15 detailed beads using `createBead`, each targeting 15-25 tool calls
-6. Label them with the phase label (e.g., `phase:2-core-entities`)
-7. Close the placeholder bead using `closeBead`. If it's blocked by dependencies,
+6. Label them with the phase label (e.g., `phase:2`) — use just the number, no sub-names
+7. **Create a smoke test bead as the LAST bead** — depends on all other beads in the
+   phase. Title: `"Smoke test: verify phase N acceptance criteria end-to-end"`.
+   Description must tell Trench to: start the full stack (docker compose, migrations,
+   seed, dev server), then curl every route/endpoint/page that should work after this
+   phase, verify 200s and correct content, and fix anything broken. Save the
+   verification script as `scripts/smoke-phase-N.sh`. This catches integration gaps
+   (missing files, wrong ports, broken routes) that unit tests miss.
+8. Close the placeholder bead using `closeBead`. If it's blocked by dependencies,
    use `removeDep` to remove them first, then close.
-8. Call `escalate` when done
+9. Call `escalate` when done
 
 **Key principle:** You have the advantage Scout didn't — you can READ the code that
 exists. Your beads should reference actual files, actual interfaces, actual patterns

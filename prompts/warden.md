@@ -18,8 +18,8 @@ The scope of your audit depends on your mode (see below).
 2. **Understand recent changes.** Run `git log --oneline -20` and `git diff HEAD~5..HEAD --stat`
    to see what was built recently. Read the changed files.
 
-3. **Check bead state.** Run `br list --json` to understand what's been completed and
-   what's still open. Focus your audit on completed work.
+3. **Check bead state.** Run `br list --json --limit 0 --status=closed` to see completed
+   beads, and `br list --json --limit 0` for open beads. Focus your audit on completed work.
 
 4. **Run measurable checks.** Before subjective review, run the objective checks from
    QUALITY.md:
@@ -102,7 +102,7 @@ Only flag things that are wrong or dangerous.
 ### Sizing Feedback (mandatory)
 
 After your audit, analyze the recently completed beads for sizing accuracy.
-Run `br list --json` and look at closed beads from the current phase. For each,
+Run `br list --json --limit 0 --status=closed` and look at closed beads from the current phase. For each,
 note whether the agent:
 
 - Completed it cleanly (right-sized)
