@@ -840,65 +840,6 @@ and bead resize. This would convert hard failures into planned handoffs earlier.
 
 ## Cost Analysis (Final Submission)
 
-### Development and Testing Costs
-
-Scuffy's development involved many iterations — the workspace was rebuilt from
-scratch multiple times as the architecture evolved. Session logs from earlier
-runs were lost in those resets. Cost data comes from the surviving dashboard
-and extrapolation.
-
-**Largest run (surviving, dashboard data):**
-
-| Item | Amount |
-|---|---|
-| Sessions | 274 |
-| Total tokens | 103.13M |
-| Cache reads | 13.37M |
-| Avg tools/session | 33 |
-| Total runtime | 197m 40s |
-| Success rate | 3% |
-| **Estimated cost** | **$247.09** |
-
-**Second-largest run:** ~$160 (dashboard observed before workspace reset)
-
-**All other runs combined (estimated):** ~$150–200 across ~4 medium runs, ~10
-small runs, and ~20 micro runs
-
-| Item | Amount |
-|---|---|
-| Total invocations across all runs | ~600+ sessions |
-| Estimated total tokens | ~250M+ |
-| **Estimated total development spend** | **~$550–600** |
-
-Pricing: Claude Sonnet 4.6 at $3/$15 per MTok in/out. GPT-5.4 at $2.50/$10
-per MTok in/out. Cache reads at 50% discount.
-
-The 3% success rate reflects that most sessions are subagent tasks within the
-multi-agent pipeline — a "failed" session is often a subagent that completed its
-subtask but the parent session counted it as incomplete. This is a dashboard
-artifact, not an agent failure rate.
-
-### Production Cost Projections
-
-| 100 Projects | 1,000 Projects | 10,000 Projects |
-|---|---|---|
-| $50–100/month | $500–1,000/month | $5,000–10,000/month |
-
-**Important caveat:** The PRD template assumes a per-user SaaS model, but Scuffy
-is a software factory — it builds applications, not serves end users. The
-meaningful cost unit is **per project build**, not per user per month. The table
-above reflects projects built per month.
-
-**Per-project cost breakdown:** A full application rebuild (like Ship) costs
-$150–250 in API spend across 200–300 sessions. A smaller task (single feature,
-bug fix) costs $0.50–5.00 across 5–30 sessions. The dominant cost driver is
-input tokens — the agent reads far more than it writes, and the ts-morph
-exploration tools (describeModule, listNamespace) reduce per-session read cost
-by ~5.7x compared to raw file reads.
-
-### Assumptions
-
-- Average tokens per session (input / output): ~376K / ~1.9K
-- Cost per session: ~$0.90 (Claude Sonnet 4.6, with caching)
-- Per-project cost scales linearly with codebase size and task complexity
-- Cache hit rates improve with longer sessions (same files re-read)
+See [`docs/AI-COST-ANALYSIS.md`](docs/AI-COST-ANALYSIS.md) for the full cost breakdown
+including development spend (~$550–600 across ~600+ sessions), production
+projections, and per-project cost analysis.
