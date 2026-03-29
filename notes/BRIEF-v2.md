@@ -127,13 +127,13 @@ passes its acceptance criteria.
 - Health endpoint: GET /health → { item: { status: "ok" } }
 - Seed: 3 demo accounts
 
-**Acceptance — a grader will:**
-1. Open http://localhost:5173 → see a styled app with login link in nav
-2. Click Login → see a styled form
-3. Enter `ava@demo.ship` / `ava-demo-password` → login succeeds
-4. Nav shows "Ava Stone" and a Logout button. Login link is gone.
-5. Click Logout → returns to login-able state
-6. GET http://localhost:3000/health → 200 OK
+**Acceptance — a user will:**
+1. Open the app and see a professional-looking landing page with a Sign In link
+2. Click Sign In and see a clean login form
+3. Sign in as Ava Stone and see her name in the top nav, with a Sign Out button.
+   The Sign In link is no longer visible.
+4. Click Sign Out and return to the signed-out state
+5. Try signing in with a wrong password and see a clear error message
 
 ---
 
@@ -151,11 +151,14 @@ passes its acceptance criteria.
 - Navigation: programs list → program detail → back
 - Seed: 4 programs, 3 projects
 
-**Acceptance — a grader will:**
-1. Navigate to Programs → see 4 program cards with colors and emoji
-2. Click "New Program" → fill form → program appears in list
-3. Click a program → see its detail page with projects listed
-4. Click "New Project" within program → project appears
+**Acceptance — a user will:**
+1. Go to Programs and see four program cards, each with its color and emoji
+2. Create a new program by filling in a name, description, picking a color, and
+   typing an emoji. The new program appears in the list immediately.
+3. Click into a program and see its description, projects, and a way to add a
+   new project
+4. Create a project inside that program. It appears in the project list.
+5. Navigate back to the programs list from the detail page
 
 ---
 
@@ -169,12 +172,13 @@ passes its acceptance criteria.
 - Person detail view: full profile with reporting hierarchy
 - Seed: 5 people with manager relationships
 
-**Acceptance — a grader will:**
-1. Navigate to Team Directory → see 5 people in a styled table
-2. Table shows: name (linked), email, role, capacity, reports-to
-3. Click a person → see their detail page with full profile
-4. Reporting hierarchy is clear (Ava manages Milo and Lena, Milo manages
-   Priya and Daniel)
+**Acceptance — a user will:**
+1. Go to Team Directory and see all five team members in a clean table
+2. See each person's name, email, role, weekly capacity, and who they report to
+3. Click someone's name and see their full profile — job info, capacity, and
+   where they sit in the reporting chain
+4. Understand at a glance that Ava leads the team, Milo and Lena report to her,
+   and Priya and Daniel report to Milo
 
 ---
 
@@ -197,13 +201,18 @@ passes its acceptance criteria.
 - Valid priorities: low, medium, high, urgent
 - Seed: 5 issues in various states across programs
 
-**Acceptance — a grader will:**
-1. Navigate to Issues → see seeded issues in a styled list
-2. Filter by state → list updates
-3. Click "New Issue" → fill form with program, assignee, priority → issue appears
-4. Click an issue → see detail page with state and priority badges
-5. Click "Start" on a todo issue → state changes to in_progress
-6. View sprints in program detail
+**Acceptance — a user will:**
+1. Go to Issues and see a list of existing issues with colored state and
+   priority badges that are immediately readable
+2. Use the filter bar to narrow the list by state, sprint, or assignee — the
+   list updates instantly
+3. Create a new issue by filling in a title, choosing a program, assigning it
+   to someone, and setting a priority. It appears in the list.
+4. Click an issue to see its full detail — description, who it's assigned to,
+   what sprint it's in, and its current state
+5. Move an issue forward (e.g., click "Start Work" on a to-do issue) and see
+   the state badge update
+6. From a program's detail page, see its sprints with dates and status
 
 ---
 
@@ -226,12 +235,16 @@ passes its acceptance criteria.
 - Review form: review text, plan validation (yes/no/not recorded), rating (1-5 stars)
 - Seed: 2 plans, 2 retros, 2 reviews in pending state
 
-**Acceptance — a grader will:**
-1. Log in as Priya → navigate to Weekly Plans → see plans
-2. Create a new plan: text, success criteria, slide confidence to 75%
-3. Log in as Ava → navigate to Planning Review Queue → see Priya's pending plan
-4. Click Approve → plan shows "Approved" badge with approver name
-5. Click "Request Changes" on another item → shows "Changes Requested"
+**Acceptance — a user will:**
+1. Sign in as Priya, go to Weekly Plans, and see her existing plans
+2. Create a new weekly plan: write what she'll do this week, define success
+   criteria, and slide the confidence bar to 75% (the bar turns from red to
+   yellow to green as confidence increases)
+3. Sign in as Ava (Priya's manager), go to the Planning Review Queue, and
+   see Priya's plan waiting for approval
+4. Approve the plan — it immediately shows an "Approved" badge with Ava's name
+5. On a different item, click "Request Changes" — it shows "Changes Requested"
+   and the submitter would see that status on their plans page
 
 ---
 
@@ -253,12 +266,16 @@ passes its acceptance criteria.
 - Comment section component: embeddable on issue detail, plan detail, etc.
 - Seed: activity entries, notifications, comments, standups
 
-**Acceptance — a grader will:**
-1. Navigate to Dashboard → see "My Week" section + recent activity
-2. See notification badge in nav → click → see notification list
-3. Mark a notification as read → badge count decreases
-4. Go to an issue detail → see comments section → add a comment
-5. Navigate to Standups → see standup entries
+**Acceptance — a user will:**
+1. Go to the Dashboard and see two things: a "My Week" summary of what's on
+   their plate, and a scrollable feed of recent activity across the workspace
+2. Notice a red badge on the notification bell in the nav — click it and see
+   a list of unread notifications (e.g., "Your weekly plan was approved")
+3. Mark a notification as read and see the badge count go down
+4. Open an issue and scroll down to the comments section. Write a comment.
+   It appears immediately with their name and timestamp.
+5. Go to Standups and see what the team reported — who did what yesterday,
+   what they're doing today, and what's blocking them
 
 ---
 
@@ -273,11 +290,13 @@ passes its acceptance criteria.
 - Wiki edit: inline edit on detail page
 - Seed: 2 wiki pages
 
-**Acceptance — a grader will:**
-1. Navigate to Wiki → see 2 seeded pages
-2. Click a page → see full content
-3. Create a new page → it appears in the list
-4. Edit the page → changes persist
+**Acceptance — a user will:**
+1. Go to the Wiki and see a list of knowledge base articles with titles,
+   summaries, and when they were last updated
+2. Click an article and read its full content
+3. Create a new article by giving it a title and writing content. It appears
+   in the wiki list.
+4. Edit an existing article and see the changes saved
 
 ---
 
@@ -317,13 +336,16 @@ passes its acceptance criteria.
 - Poll safety net: 5-minute interval catches missed WebSocket events
 - Proactive findings persisted to database automatically
 
-**Acceptance — a grader will:**
-1. Open any page → see FleetGraph chat toggle at bottom
-2. Click it → see chat panel with prompt buttons
-3. Click "Analyze this sprint" → FleetGraph processes and shows findings
-4. Finding shows severity badge, reasoning text, affected entity
-5. Click Acknowledge → finding badge clears
-6. See a pre-seeded proactive finding in the findings list
+**Acceptance — a user will:**
+1. Notice a small FleetGraph toggle at the bottom of the screen on any page
+2. Click it and see a chat panel slide up with quick-action buttons like
+   "Analyze this sprint" and "What's blocking progress?"
+3. Click "Analyze this sprint" — after a moment, FleetGraph shows its findings:
+   cards with severity colors (blue for info, orange for warning, red for critical),
+   each explaining what it found and which entity is affected
+4. Click "Acknowledge" on a finding — the card dims, indicating it's been seen
+5. See a pre-existing finding from FleetGraph's proactive monitoring (it found
+   something on its own, without being asked)
 
 ---
 
@@ -337,19 +359,26 @@ passes its acceptance criteria.
 - Responsive layout check (desktop + tablet minimum)
 - Fix any console errors, 500s, dead routes
 
-**Acceptance — the full demo flow without errors:**
-1. Open app → styled landing
-2. Login as Ava → nav updates
-3. Programs → 4 cards → click Foundation → see projects + sprints
-4. Team Directory → 5 people → click Priya → workload detail
-5. Issues → filtered list → create issue → assign → change state
-6. Weekly Plans → see plans → create plan with confidence slider
-7. Planning Review Queue → approve a plan
-8. Dashboard → my week + activity feed
-9. Notifications → mark read
-10. Wiki → browse → create page
-11. FleetGraph → chat → analyze → see finding → acknowledge
-12. Logout
+**Acceptance — a user walks through the entire app without hitting an error:**
+1. Open the app. It looks professional and intentional.
+2. Sign in as Ava. Her name appears in the nav.
+3. Browse Programs. See four cards. Click into Foundation Refresh and see its
+   projects and sprints.
+4. Go to Team Directory. See five people. Click Priya and see her profile,
+   who she reports to, and her capacity.
+5. Go to Issues. See a list with colored badges. Filter by state. Create a new
+   issue, assign it to Daniel, set it as high priority. Click into it and move
+   it to "In Progress."
+6. Sign out. Sign in as Priya. Go to Weekly Plans. Create a plan for this
+   week with a confidence slider. Submit it.
+7. Sign out. Sign in as Ava. Go to Planning Review Queue. See Priya's pending
+   plan. Approve it. See the "Approved" badge.
+8. Go to the Dashboard. See what's happening this week and recent activity.
+9. Check notifications. Mark one as read.
+10. Go to the Wiki. Read an article. Create a new one.
+11. Open FleetGraph. Click "Analyze this sprint." See findings with severity
+    colors. Acknowledge one.
+12. Sign out. Done.
 
 ---
 
