@@ -1438,7 +1438,9 @@ async function mainParallel(): Promise<void> {
     }
 
     // Nothing to spawn and nothing running → check if truly done
-    if (activeSlots.size === 0 && ready.length === 0) {
+    // This also triggers when ready beads exist but all are filtered out
+    // (halted after max attempts, emergency P0 bugs with healthy main, etc.)
+    if (activeSlots.size === 0) {
       if (process.env["SCUFFY_USE_JUDICAR"] === "1") {
         console.log("No beads ready. Spawning Judicar to verify completion.");
         const isDone = judicarTriageComplete();

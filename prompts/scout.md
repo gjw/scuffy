@@ -153,8 +153,33 @@ The smoke test bead description must include:
    missing plugins — these are all fixable in this bead.
 5. **Write a runnable verification script**: save it as `scripts/smoke-phase-N.sh`
    so it can be re-run later
+6. **Write a Playwright test manifest**: save it as `tests/e2e/phase-N.spec.txt`.
+   This is a plain-text description of what a Playwright browser test should verify
+   for this phase. Write it in human-readable steps, not code:
+   ```
+   # Phase 1: Auth flow
+   - Navigate to /
+   - Expect: page contains "Sign In" link
+   - Click "Sign In"
+   - Expect: login form with email and password fields
+   - Fill email=ava@ship.local, password=ava-demo-pass
+   - Click submit
+   - Expect: nav shows "Ava Martinez", logout visible, no sign-in link
+   - Click logout
+   - Expect: redirected to /, sign-in link reappears
+   ```
+   This file does NOT run. It accumulates across phases so that a final-phase
+   bead can convert all manifests into real Playwright tests. Each phase adds
+   its own file without touching previous phases.
 
 Title pattern: `"Smoke test: verify phase N acceptance criteria end-to-end"`
+
+**IMPORTANT: No browser automation.** Do NOT use Playwright, Puppeteer, or any
+headless browser. Use `curl` for everything. For HTML pages, curl the URL and
+check the response contains expected strings (page title, key element IDs, nav
+links). For API endpoints, curl and check response JSON. For auth flows, use
+curl with cookie jars. If a check requires client-side JavaScript execution
+(like sessionStorage), skip it and note it as a limitation — do not block on it.
 
 This bead catches integration gaps that unit tests miss: missing HTML entrypoints,
 port mismatches, broken proxies, routes that 404, pages that render blank.

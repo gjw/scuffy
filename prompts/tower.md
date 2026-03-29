@@ -64,8 +64,12 @@ implementation beads** based on the ACTUAL codebase — not the brief.
    Description must tell Trench to: start the full stack (docker compose, migrations,
    seed, dev server), then curl every route/endpoint/page that should work after this
    phase, verify 200s and correct content, and fix anything broken. Save the
-   verification script as `scripts/smoke-phase-N.sh`. This catches integration gaps
-   (missing files, wrong ports, broken routes) that unit tests miss.
+   verification script as `scripts/smoke-phase-N.sh` and a Playwright test manifest
+   as `tests/e2e/phase-N.spec.txt` (plain-text steps, not code — these accumulate
+   across phases for a final Playwright conversion bead). Use curl only — no Playwright
+   or browser automation. For HTML pages, curl and check response contains expected
+   strings. This catches integration gaps (missing files, wrong ports, broken routes)
+   that unit tests miss.
 8. Close the placeholder bead using `closeBead`. If it's blocked by dependencies,
    use `removeDep` to remove them first, then close.
 9. Call `escalate` when done
