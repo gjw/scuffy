@@ -511,6 +511,99 @@ point. More continuous power delivery, less wasted time, and a misfire in one cy
 doesn't stall the others. Each cylinder runs a complete feature from planning through
 verification to merge — a coherent vertical slice, not scattered horizontal layers.
 
+## Parallelism Analysis
+
+The current system has 3 parallel slots but achieves far less than 3x throughput
+because of global stop-the-world operations. The multi-cylinder architecture
+eliminates most of these, achieving near-continuous slot utilization.
+
+### What freezes all slots in the current system
+
+Every one of these calls `drainAllSlots()` or runs a blocking `spawnRoleClean()` on
+the main worktree, halting all parallel work:
+
+| Operation | Frequency | Duration | Trigger |
+|-----------|-----------|----------|---------|
+| Warden drain (dark + light) | Every N beads or phase end | 20-40 min (8-12 serial Trench sessions) | `completedSinceWarden >= WARDEN_INTERVAL` |
+| Emergency P0 bypass drain | ~5x per phase | 2-5 min each | `finishBead` detects pre-existing failures |
+| Circuit breaker pause | 1-3x per phase | 5-10 min | 5 consecutive parallel failures |
+| Tower phase expansion | 1x per phase | 3-5 min | Phase placeholder detected |
+| Judicar triage | ~15-20x per phase | 1-2 min each | Bead fails 2x |
+| Merge conflict resolution | ~5-10x per phase | 2-3 min each | `mergeToMain` returns "conflict" |
+
+In a typical 60-minute phase (like phases 5-6 in our run 6), estimated time with
+all 3 slots occupied: ~25-30 minutes. The rest is global stops, drains, and serial
+operations. **Practical parallelism: ~1.3-1.5x despite having 3 slots.**
+
+### What freezes slots in multi-cylinder
+
+Almost nothing is global. Failures, Warden, and Judicar are all scoped to one flow
+on one slot. Other slots keep running.
+
+| Operation | Scope | Impact on other slots |
+|-----------|-------|----------------------|
+| Step failure + retry | One flow, one slot | **None** — other flows keep running |
+| Re-groom on failure | One flow, one slot | **None** — Groomer runs on that slot |
+| Judicar triage | One flow, one slot | **None** — Judicar runs for that flow |
+| Flow-level Warden | One flow, one slot | **None** — runs on flow branch pre-merge |
+| Merge to main | Brief serialized op | **Seconds** — other slots stall briefly for merge lock |
+| Phase boundary | All slots | **Natural sync** — all flows done, slots idle anyway |
+
+**The emergency P0 bypass cascade disappears entirely.** Quality checks run per-step
+on the flow branch. If a step breaks something, it's caught on that flow, retried on
+that slot. Other flows never see it because it's not on main yet. There is no global
+"main is broken, drain everything" event.
+
+**The Warden drain disappears.** Flow-level Warden runs on the flow's slot after the
+flow's last step, auditing the flow branch before merge. If it finds issues, fix steps
+are appended to the flow's chain and executed on the same slot. No drain, no global
+stop. Phase-level Warden runs at the natural sync point (all flows done = all slots
+idle anyway — no drain needed).
+
+### Projected utilization
+
+For a phase with 3-4 features, 3 slots, ~45 minutes of execution time:
+
+| | Current system | Multi-cylinder |
+|---|---|---|
+| Theoretical max | 3x (135 slot-minutes) | 3x (135 slot-minutes) |
+| Global stop time | ~30-35 min (drains, P0s, circuit breakers) | ~5-7 min (phase boundary only) |
+| Effective slot-minutes | ~60-75 | ~120-128 |
+| Practical parallelism | 1.3-1.5x | 2.5-2.8x |
+
+This means a clean phase that takes 60 minutes in the current system should take
+~35-40 minutes in multi-cylinder — not because individual steps are faster, but
+because slots are almost never idle.
+
+**Caveat on phase 4:** Our phase 4 took 4.5 hours, but ~3 hours of that was a
+specific bug (dependency ordering + router architecture issue), not parallelism
+overhead. The honest comparison is phases 5-6, which ran clean at ~60 minutes each.
+Multi-cylinder would cut those to ~35-40 minutes through better slot utilization.
+The dependency ordering bug would also not have occurred in multi-cylinder (steps
+are sequential within a flow), but attributing the full 3-hour savings to parallelism
+would be misleading.
+
+### The deeper point: failure isolation
+
+The parallelism improvement is significant, but the bigger win is **failure blast
+radius**. In the current system, one bad bead can cascade into a global stop:
+
+```
+Bad bead → bypass → P0 created → drain all slots → serial fix → health check loop
+```
+
+Every slot stops. Every in-flight bead's work is wasted. Recovery takes 10-20 minutes
+of wall time with zero productive work happening.
+
+In multi-cylinder:
+
+```
+Bad step → retry on this slot → re-groom if needed → other slots unaffected
+```
+
+One slot loses 5 minutes. The other two keep producing. The system degrades
+gracefully instead of catastrophically.
+
 ## Conway's Law Alignment
 
 The communication structure determines the system architecture:
@@ -551,9 +644,16 @@ flows per phase: 300-800K tokens (~$3-8).
 
 Total overhead per phase: ~$5-12.
 
-The phase 4 thrashing in the current system burned ~20M tokens over 4 hours of retries
-(~$60-80 in wasted API calls alone, plus 4 hours of wall time). The multi-cylinder
-overhead pays for itself on the first complex phase.
+For comparison: a clean phase in the current system (phases 5-6) runs ~60 minutes
+with ~15-20M tokens across all sessions. The multi-cylinder overhead adds ~$5-12 but
+saves ~20 minutes of wall time by keeping slots occupied. The overhead pays for itself
+in the first phase through fewer retries and less wasted work.
+
+Note: phase 4 burned ~20M tokens in thrashing over 4 hours, but that was primarily
+a dependency ordering bug plus a specific router architecture issue — not a fair
+comparison for parallelism savings alone. The multi-cylinder architecture would have
+prevented the dependency ordering bug (sequential steps within a flow), but the
+router issue would still have required human guidance.
 
 ## What This Doesn't Solve
 
