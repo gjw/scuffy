@@ -79,6 +79,22 @@ exists. Your beads should reference actual files, actual interfaces, actual patt
 from the codebase. This is why placeholder expansion produces better beads than
 upfront planning.
 
+**CRITICAL: Declare explicit sequential dependencies within the phase.** If bead B
+can only succeed after bead A merges to main (because B reads, extends, or tests
+code that A creates), you MUST declare that dependency via `dependsOn`. Common
+chains that MUST be sequential:
+
+- Shared schemas/contracts → repository interfaces → Postgres implementations
+- Repository interfaces → API routes → route tests
+- API routes → web client helpers → web pages → web page tests
+- All of the above → smoke test (already required)
+
+Err on the side of MORE dependencies, not fewer. Three Trench agents run in
+parallel, but a bead dispatched before its prerequisites land will fail and
+waste an entire session (~$5-10 and 5-10 minutes). Correct ordering is worth
+more than maximum parallelism. Beads with no intra-phase dependencies (e.g.,
+seed data, documentation, independent UI pages) can run in parallel safely.
+
 ## Task Sizing (when creating or splitting work for Trench)
 
 **The #1 cause of wasted sessions is oversized beads.** Every bead that blows the
