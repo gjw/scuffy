@@ -4,6 +4,24 @@ Custom TypeScript agent loop that builds applications from business requirements
 No LangGraph, no LangChain -- a from-scratch agent with a multi-agent pipeline
 (Summoner/Scout/Trench/Warden), Zod-validated tools, and dual-provider LLM support.
 
+## Approach
+
+The Ship rebuild was built with minimal human intervention by design. The agent
+received a short, technology-agnostic business requirements brief -- not a
+technical spec, not the original source code, not a step-by-step plan. It chose
+its own stack, designed its own architecture, generated its own work items, and
+built the application autonomously.
+
+When the agent failed, we did not patch its output. We diagnosed the root cause,
+improved the pipeline architecture (prompts, tools, orchestration, quality gates),
+and restarted from scratch. This happened 30-50 times over the week. The result
+is an agent that got progressively better at building software, not a hand-corrected
+application that happens to have an agent in front of it.
+
+This means the Ship rebuild is rougher than it would be with heavier intervention.
+That is the point. The rebuild quality reflects what the agent can actually do --
+the comparative analysis documents every shortcoming honestly.
+
 ## Submission Documents
 
 | Document | Description |
@@ -14,7 +32,7 @@ No LangGraph, no LangChain -- a from-scratch agent with a multi-agent pipeline
 | [docs/AI-DEV-LOG.md](docs/AI-DEV-LOG.md) | Tools & workflow, effective prompts, code analysis, key learnings |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design, data model, API surface, invariants |
 | [traces/](traces/) | JSONL session traces (normal run, error recovery, multi-agent) |
-| [notes/](notes/) | Case studies: OOM hardlock, polite trench, phase leak |
+| [docs/](docs/) | Case studies: [OOM hardlock](docs/case-study-oom-hardlock.md), [polite trench](docs/case-study-polite-trench.md), [phase leak](docs/case-study-phase-leak.md) |
 
 ## Quick Start
 

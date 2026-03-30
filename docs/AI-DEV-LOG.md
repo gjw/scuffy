@@ -19,8 +19,8 @@ in headless mode, each working on a single bead (work item).
 
 **Dual-provider architecture:** The agent supports both Anthropic (Claude) and
 OpenAI (GPT-5.4) via a provider abstraction. This was added after Anthropic
-was declared a supply chain risk. In practice, most autonomous runs used
-Claude Sonnet 4.6; some planning tasks used GPT-5.4-pro.
+was declared a supply chain risk. A few early runs used Claude Opus/Sonnet;
+nearly all subsequent runs used GPT-5.4 on a Gauntlet-provided OpenAI key.
 
 **Issue tracking: beads_rust (br) + beads_viewer (bv)** — all work items
 tracked as beads with dependency graphs. `bv --robot-triage` provided
@@ -163,13 +163,13 @@ writing code.
 
 ### Where the tools fell short
 
-- **Layer confusion in debugging.** The OOM hardlock case study is the
+- **Layer confusion in debugging.** The [OOM hardlock case study](case-study-oom-hardlock.md) is the
   clearest example: three agents diagnosed a React infinite re-render as a
   "test infrastructure problem" because the symptoms (Vitest worker crashes)
   appeared in the test layer. Agents debug symptoms, not causes, unless
   explicitly instructed to descend layers.
 
-- **Role ambiguity causes inaction.** The Polite Trench case study: an agent
+- **Role ambiguity causes inaction.** The [Polite Trench case study](case-study-polite-trench.md): an agent
   correctly diagnosed a one-line bug but refused to fix it because it
   interpreted its role as "verification only." The cost was 6.5 hours of
   idle time. Clear permissions in prompts are load-bearing.
