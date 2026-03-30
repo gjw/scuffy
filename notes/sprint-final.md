@@ -66,9 +66,17 @@ In parallel:
   Update CODEAGENT.md if time (#8)
 ```
 
-## What can be done RIGHT NOW (while waiting on rebuild)
+## Remaining tasks
 
-1. **Review demo video script** — `notes/demo-video-script.md`
-2. **Review LinkedIn post** — `notes/linkedin-post.md`
-3. **Update CODEAGENT.md** — weave in case studies, sharpen architecture decisions
-4. **Prep demo environment** — create the `demo/hello.ts` test file, verify REPL works, verify headless mode works
+### Do now
+
+1. **Rewrite CODEAGENT.md comparative analysis** — fresh numbers, observations from new build
+2. **Update demo video script** — adjust for what's actually deployed and demoable
+3. **Record demo video** — Loom
+
+### Then just finish
+
+4. **Build timeline + dashboard snapshot** — add to docs/, link from README
+5. **Post LinkedIn** — copy-paste draft + attach Loom link
+6. **Fill submission form** — paste links, done
+7. **Final push** — GitLab (done once already, push again after CODEAGENT update)

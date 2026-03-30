@@ -558,15 +558,15 @@ later) and would have been reached if the run had continued.
 
 ### Current State of the Pipeline
 
-Failures have been almost entirely replaced by inefficiencies. The pipeline no
-longer crashes or requires manual intervention. The remaining issues are:
+The pipeline no longer crashes, no longer requires manual intervention, and
+handles its own edge cases. Dedicated agents resolve merge conflicts,
+ambiguous type definitions, and triage escalations. Work item sizing is
+largely correct at creation time — resizes still happen but are infrequent.
+The br SQLite corruption issue was resolved by updating the upstream
+dependency (the fix had existed for 23 days before we found it).
 
-- Work items still sized too large (triggers resize requests, wastes tokens)
-- Type errors occasionally sneak through via the inherited-failure bypass
-- br SQLite corruption (upstream dependency, not agent-caused)
-
-Per-agent success rate on the latest run is ~90%+ if resize requests count as
-successful exits. There are no hard failures or manual interventions required.
+The latest build ran to completion with zero manual interventions and zero
+hard failures. Per-agent success rate is ~98%.
 
 ---
 
@@ -575,16 +575,23 @@ successful exits. There are no hard failures or manual interventions required.
 ### 1. Executive Summary
 
 We built Scuffy, a custom TypeScript coding agent with a multi-agent pipeline
-(Summoner → Scout → Trench → Warden), and directed it to rebuild Ship (a project
-management application called FleetGraph) from a business-requirements brief. The
-agent chose its own architecture, generated its own work items, and built the
-application autonomously across 274 sessions consuming 103M tokens (~$247). The
-rebuild reached ~70% feature completion before being stopped for submission —
-functional CRUD, filtering, sprint planning, and user management all working
-in-memory, with schemas and migrations written but not yet wired to a database.
-The process required 15–30 full pipeline restarts as we iterated on the
-orchestration architecture, but the final run required zero manual code
-interventions.
+(Summoner → Scout → Trench → Warden → Judicar), and directed it to rebuild
+Ship (a project management application) from a technology-agnostic business
+requirements brief. The agent chose its own stack, generated its own work
+items, and built the application autonomously. The final build ran 157
+sessions consuming 90M tokens in 232 minutes (~$217 estimated), producing
+123K lines of TypeScript across 378 files with real Postgres persistence.
+
+The pipeline was restarted 30–50 times over the week — not patching the
+agent's output, but diagnosing root causes, improving the orchestration
+architecture, and starting fresh each time. The result is a pipeline that
+got progressively better at building software. The final run required zero
+manual code interventions.
+
+Functional features: authentication and login, program and project
+management, team directory and profiles, weekly planning, issue tracking
+with assignment, standups, wiki, and a planning review queue. FleetGraph
+(the AI agent layer from the original) did not land.
 
 ### 2. Architectural Comparison
 
@@ -592,249 +599,259 @@ interventions.
 
 | Metric | Original (FleetGraph) | Agent-Built (Ship) |
 |---|---|---|
-| TypeScript files | 459 | 75 |
-| Lines of code | 131,389 | 14,762 |
-| Test files | 116 | 11 |
-| React components | ~130 | 24 |
-| Type/interface definitions | 106+ files | 237 definitions |
+| TypeScript files | 459 | 378 |
+| Lines of code | 131,389 | 123,403 |
+| Test files | 116 | 137 |
+| React pages | ~130 components | 15 pages + shell |
+| Type/interface definitions | 106+ files | 1,009 definitions |
 | Packages | monorepo (pnpm) | monorepo (npm workspaces) |
+| Database | PostgreSQL (single documents table) | PostgreSQL (normalized per-entity tables) |
+| Git commits | — | 378 |
 
-The agent-built version is ~11% the size of the original. This reflects both
-the 70% completion state and the agent's tendency toward compact implementations.
+The agent-built version approaches the original in raw scale. It is not a
+stub or prototype — it is a functional application with persistence, auth,
+and a multi-page UI.
 
 **Stack choices:**
 
-Both versions converged on very similar stacks: TypeScript, React, Vite, Express.
-The original used pnpm workspaces; the agent chose npm workspaces. Both use a
-monorepo with api/, web/, and shared/ packages. The stack overlap is striking
-given that the brief was deliberately architecture-agnostic — the agent was told
-business requirements and allowed to choose freely. It picked what most developers
-would consider the default modern TypeScript full-stack setup.
+Both versions converged on very similar stacks: TypeScript, React, Vite,
+Express, PostgreSQL. The original used pnpm workspaces; the agent chose npm
+workspaces. Both use a monorepo with api/, web/, and shared/ packages.
+
+This convergence is more significant than it appears. The agent had a tool
+to read the original FleetGraph source code but never used it — not once,
+across any run. It did not know the original's directory layout, package
+structure, or stack choices. The brief described business requirements
+only: what users need, what they should see, what the product should do.
+The agent independently arrived at nearly the same architecture a human
+team built, from requirements alone.
 
 **The document model divergence:**
 
 The most significant architectural difference is the data model. The original
-FleetGraph uses a **single unified `documents` table** where sprints, issues,
-people, retros, programs, and all other entities are rows distinguished by a
+uses a **single unified `documents` table** where sprints, issues, people,
+retros, programs, and all other entities are rows distinguished by a
 `document_type` enum and a JSONB `properties` column. This is a bold,
 opinionated choice — it simplifies queries and migrations but means every
-entity shares one table (26 columns plus a JSONB `properties` bag for
-type-specific data).
+entity shares one table.
 
-The agent chose **separate domain entities** with dedicated tables — every time,
-across every restart, without exception. We even framed the brief neutrally,
-noting that the original used a single-document model. The agent consistently
-chose conventional normalized schemas with per-entity tables. This is arguably
-what most human developers would also choose — the original's document model
-was the architectural outlier.
+The agent chose **separate domain entities** with dedicated tables — every
+time, across every restart, without exception. We framed the brief neutrally.
+The agent consistently chose conventional normalized schemas with per-entity
+tables. This is arguably what most human developers would also choose — the
+original's document model was the architectural outlier.
 
-**UI density philosophy:**
+**Brief framing matters more than expected:**
 
-An unexpected divergence in design philosophy. The agent produced informationally
-dense pages — maximizing the number of available actions per view to minimize
-navigation. The original Ship took the opposite approach: clean, sparse pages
-with few options each, requiring users to navigate between many views to
-accomplish tasks. The original's navigation structure was a known pain point.
-
-The agent was never instructed on UI density. It never looked at the original
-application's source code despite having a dedicated tool to do so. This
-density-first approach may reflect the LLM optimizing for task completion
-efficiency — or it may be an emergent pattern from the brief's emphasis on
-functional requirements over visual design.
+Across 30–50 restarts, one of the most impactful changes was rewriting the
+brief to be voiced as **what the user needs, expects, and should see** rather
+than describing what the system should do and how it should behave internally.
+The user-voiced brief produced considerably more coherent and complete
+output — the agent built features that felt like a product, not features
+that satisfied a spec.
 
 ### 3. Performance Benchmarks
 
-The codebase scale table in Section 2 tells the raw size story. These benchmarks
-focus on what the numbers reveal about the agent's behavior.
-
 | Metric | Value | What It Reveals |
 |---|---|---|
-| 14,762 lines across 75 files | ~197 lines/file avg | Agent writes compact files, no bloat |
-| 237 type/interface definitions | 3.2 per file | Strong type discipline despite no instruction to prioritize types |
-| 11 test files for 75 source files | ~15% test coverage by file count | Agent under-tests — original has 116 tests for 459 files (~25%) |
-| 24 React components | All functional components | No class components, consistent patterns |
-| 103M tokens consumed | ~376K tokens/session avg | Context-hungry — most tokens are input (reads), not output (writes) |
-| 274 sessions, $247 | ~$0.90/session | Cost-per-session is low; total cost comes from volume |
+| 123,403 lines across 378 files | ~326 lines/file avg | Substantial files, not stubs |
+| 1,009 type/interface definitions | 2.7 per file | Strong type discipline without instruction |
+| 137 test files for 378 source files | ~36% test coverage by file count | Agent tests more aggressively than the original (~25%) |
+| 15 React pages + shell | All functional components | Consistent patterns, no class components |
+| 90M tokens consumed | ~573K tokens/session avg | Context-hungry — reads dominate writes |
+| 157 sessions, ~$217 | ~$1.38/session | Cost-per-session is low; total cost comes from volume |
 | 33 avg tools/session | | Agent is active per session, not stuck in reasoning loops |
-| 3% dashboard success rate | | Misleading — reflects subagent counting, not actual task failure rate |
+| 232 minutes runtime | | Under 4 hours wall clock for a functional application |
 
-**Important caveats on the comparison.** The original FleetGraph is a mature,
-shipped product with e2e tests, terraform infrastructure, collaborative editing
-(Yjs), and analytics tooling. The agent-built version is a functional prototype
-at 70% completion. The agent produced 11% of the original's line count, but
-the features it built are functional — this is not stub code. The missing 30%
-(primarily database persistence and hardening) is unfinished work, not failed
-work.
+**Comparison with the original.** The original FleetGraph is a mature, shipped
+product with e2e tests, terraform infrastructure, collaborative editing (Yjs),
+real-time WebSocket collaboration, and FleetGraph (an AI analysis agent). The
+agent-built version covers the core PM functionality — programs, issues,
+people, plans, wiki — with persistence, auth, and tests. It does not have
+collaborative editing, the AI agent layer, or production infrastructure.
 
-The agent's output-to-input token ratio (~1:54) is striking. For every token
-of code the agent writes, it reads 54 tokens of existing code. This is the
-fundamental cost structure of a coding agent and the reason the ts-morph tools
-had such outsized impact on economics.
+The agent's output-to-input token ratio remains heavily skewed toward reads.
+For every token of code the agent writes, it reads dozens of tokens of existing
+code. This is the fundamental cost structure of a coding agent and the reason
+the ts-morph exploration tools had outsized impact on economics.
 
 ### 4. Shortcomings
 
-The project required **15–30 full pipeline restarts** — blowing away the
+The project required **30–50 full pipeline restarts** — blowing away the
 workspace and starting over. Each restart represents a failure that the agent
 pipeline could not self-correct. The human had to diagnose the root cause,
 modify the orchestration architecture, and restart. The agent has no
-process-level self-awareness; it cannot observe that it is repeatedly failing
-for systemic reasons and adjust its own pipeline.
+process-level self-awareness.
 
-**Interventions log (categories, not exhaustive):**
+**Intervention categories (not exhaustive):**
 
 - **~5 restarts:** Summoner reliability failures. The bash-based orchestrator
   had fragile error handling. Fix: rewrite Summoner in TypeScript.
-- **~8 restarts:** Context blowouts. Agents read entire files, accumulated
-  context, and hit the 800K token cap. Early versions crashed the pipeline.
-  Later versions retried endlessly. Fix: ts-morph tools, smaller read windows,
-  graceful resize exits. Each mitigation required a restart to deploy.
-- **~5 restarts:** Work item sizing. Scout created beads too large for a single
-  session. Trench would exhaust context trying to implement them. Fix: added
-  the ability for Trench to request bead resizing instead of failing.
-- **~3 restarts:** br SQLite corruption. The upstream beads_rust tool corrupted
-  its database, making the work log unreadable. This is an external dependency
-  bug (documented in Bug-002), not an agent failure, but it killed the pipeline
-  each time.
-- **~3 restarts:** Miscellaneous — prompt tuning, tool parameter changes,
-  configuration adjustments that required a fresh workspace to test cleanly.
+- **~10 restarts:** Context blowouts. Agents read entire files, accumulated
+  context, and hit the 800K token cap. Fix: ts-morph exploration tools,
+  smaller read windows, graceful resize exits.
+- **~8 restarts:** Work item sizing. Scout created beads too large for a
+  single session. Fix: sizing constraints in Tower prompt, ability for
+  Trench to request bead resizing.
+- **~5 restarts:** br SQLite corruption. An upstream dependency bug
+  (documented in [Bug-002](docs/bugs/bug-002-btree-corruption/)) — the fix
+  had been released 23 days before we hit it. Running a stale version cost
+  multiple restarts. See [Bug-001](docs/bug-001-investigation.md).
+- **~5 restarts:** Brief and prompt iteration. Reframing the brief from
+  system-specification voice to user-needs voice. Adding the Judicar role.
+  Adding CASS lessons.
+- **~10+ restarts:** Miscellaneous — tool parameter changes, phase gating
+  bugs (see [phase leak case study](docs/case-study-phase-leak.md)),
+  smoke test failures, configuration adjustments.
 
-**What these interventions reveal about the agent's limitations:**
+**What these interventions reveal:**
 
-1. **No process-level learning.** The agent cannot observe that "context blowouts
-   keep killing sessions" and decide to read files differently. Every systemic
-   improvement required human diagnosis and architectural change. The agent
-   optimizes within a session but cannot optimize the pipeline itself.
+1. **No process-level learning.** The agent cannot observe that "context
+   blowouts keep killing sessions" and decide to read files differently.
+   Every systemic improvement required human diagnosis and architectural
+   change.
 
-2. **Planning agents cannot estimate complexity.** Scout consistently created
-   work items that were too large. It has no model of "how many tokens will
-   this take to implement" because it has no experience of implementation cost.
-   This is a fundamental gap — the planner and the implementer have different
-   cost models, and there is no feedback loop between them.
+2. **Planning agents cannot estimate complexity.** Scout consistently
+   created work items that were too large. It has no model of
+   implementation cost. The planner and implementer have different cost
+   models with no feedback loop between them.
 
 3. **The agent ignores available resources.** We built a tool to read the
-   original FleetGraph source. The agent never used it — across any run, with
-   any prompt. It preferred to build from the brief alone. This meant it
-   reinvented solutions the original had already solved and missed domain edge
-   cases. The agent is not curious; it does not explore beyond what it needs
-   to complete the immediate task.
+   original FleetGraph source. The agent never used it — across any run,
+   with any prompt. It preferred to build from the brief alone.
 
-4. **Type errors compound across agents.** The finishBead bypass mode (accept
-   work when failures are inherited from the parent branch) means type errors
-   propagate. The tool creates P0 beads for these, but they accumulate faster
-   than agents resolve them. Each new agent inherits a slightly more broken
-   codebase.
+4. **Type errors compound across agents.** The finishBead bypass mode means
+   type errors propagate. The tool creates P0 beads for these, but they
+   accumulate faster than agents resolve them.
 
-5. **No design sense.** The agent produced informationally dense UIs — every
-   action on every page. This is functional but potentially overwhelming. The
-   agent has no model of user experience, cognitive load, or visual hierarchy.
-   It optimizes for feature completeness, not usability.
+5. **Layer confusion in debugging.** When symptoms appear in one layer
+   (e.g., Vitest crashes) but the cause is in another (React infinite
+   re-render), agents consistently debug the symptom layer instead of
+   descending to the cause. See [OOM hardlock case study](docs/case-study-oom-hardlock.md).
 
-6. **Incomplete work is invisible to the agent.** The rebuild reached 70% —
-   everything works in-memory, database persistence is not wired. The agent
-   sequenced this deliberately (in-memory first, persist later), which is
-   reasonable, but it has no awareness of "we are running out of time" or "we
-   should prioritize deployable over complete." Time pressure is a human
-   concern the agent cannot factor in.
+6. **Role ambiguity causes inaction.** An agent correctly diagnosed a
+   one-line bug but refused to fix it because it interpreted its role as
+   "verification only." Cost: 6.5 hours of idle time. See [polite trench
+   case study](docs/case-study-polite-trench.md).
 
 ### 5. Advances
 
-**Raw throughput.** The final run produced 14,762 lines of functional application
-code in 197 minutes of runtime. The bottleneck was never the agent's coding
-speed — it was waiting for human decisions on pipeline architecture and
-recovering from restarts. Once the pipeline was stable, the agent produced
-working features continuously without breaks, fatigue, or context-switching
-cost.
+**Raw throughput.** The final run produced 123K lines of functional
+application code in 232 minutes of runtime — under 4 hours for a
+full-stack application with persistence, auth, tests, and a multi-page
+UI. Once the pipeline was stable, the agent produced working features
+continuously without breaks, fatigue, or context-switching cost.
+
+**Efficiency improved across restarts.** The final build produced 8x
+more code than the early builds while consuming fewer tokens (90M vs
+103M) in fewer sessions (157 vs 274). The pipeline got better at building
+software, not just at not crashing.
 
 **Consistency.** Every file follows the same patterns — consistent naming,
-consistent error handling, consistent component structure. There is no style
-drift across the codebase. A human team of the size that would be needed to
-produce this volume of code in a week would inevitably introduce style
-inconsistencies. The agent does not.
+consistent error handling, consistent component structure. There is no
+style drift across a 378-file codebase. A human team producing this
+volume of code in a week would inevitably introduce inconsistencies.
 
 **Automatic debt tracking.** The finishBead system creates work items for
-inherited failures mechanically. Technical debt is never silently ignored. A
-human team would need discipline and process to achieve the same; the agent
-does it because it is encoded in the tool, not because it chooses to.
+inherited failures mechanically. Technical debt is never silently ignored.
+This is encoded in the tool, not left to agent discipline.
 
-**Ambiguity documentation.** The agent mail system produced a running log of
-every design decision the agent considered ambiguous — architecture choices,
-API design patterns, domain interpretation. These reports informed better briefs
-for subsequent iterations. Most human teams do not document design decisions
-at this granularity.
+**Ambiguity documentation.** The agent mail system produced a running log
+of every design decision the agent considered ambiguous. These reports
+informed better briefs for subsequent iterations, creating a feedback
+loop across restarts.
 
-**The pipeline stabilized.** By the final run, failures had been entirely
-replaced by inefficiencies. The agent no longer crashes, no longer requires
-manual intervention, and no longer produces unrecoverable states. This is the
-most important advance: the system went from "breaks constantly, needs human
-rescue" to "runs autonomously, wastes some tokens on oversized work items."
-The gap between these two states was closed entirely through pipeline
-architecture changes, not through improvements to the underlying LLM.
+**The pipeline matured beyond stability.** Early runs broke constantly.
+Mid-week runs were stable but inefficient. The final run is genuinely
+autonomous — dedicated agents handle merge conflicts, ambiguous
+definitions, and triage escalations. Per-agent success rate is ~98%.
+Zero manual interventions, zero hard failures. The progression from
+"breaks constantly" to "runs inefficiently" to "runs well" was driven
+entirely by pipeline architecture changes, not by improvements to the
+underlying LLM.
 
 ### 6. Trade-off Analysis
 
-**Custom agent loop vs. LangGraph:** Right call. LangGraph would have added a
-Python dependency and framework learning curve for a problem that is fundamentally
-a while loop. Our custom loop is ~80 lines and we have full control over
-middleware, error propagation, and session state. The trade-off (owning our own
-tracing) was trivial to implement.
+**Custom agent loop vs. LangGraph:** Right call. Our loop is ~80 lines
+and we have full control over middleware, error propagation, and session
+state. The trade-off (owning our own tracing) was trivial.
 
-**Anchor-based editing vs. unified diffs:** Right call. Claude produces exact string
-matches more reliably than well-formed diffs. The main risk (ambiguous matches in
-large files) was manageable. We would add post-edit type checking if rebuilding.
+**Anchor-based editing vs. unified diffs:** Right call. The LLM produces
+exact string matches more reliably than well-formed diffs. We would add
+post-edit type checking if rebuilding.
 
-**Supervisor pattern vs. peer agents:** Right call for this stage. Session isolation
-prevents state corruption and makes debugging straightforward. The cost (redundant
-file reads across agents) is real but tolerable. A shared read-only context layer
-would be worth adding.
+**Supervisor pattern vs. peer agents:** Right call. Session isolation
+prevents state corruption and makes debugging straightforward. A shared
+read-only context layer would be worth adding.
 
-**ts-morph exploration tools:** Unambiguously right call. The 5.7x context reduction
-was the single biggest improvement to session success rates. Should have been
-built earlier.
+**ts-morph exploration tools:** Unambiguously right call. The 5.7x context
+reduction was the single biggest improvement to session success rates.
+Should have been built earlier.
 
-**Monolithic upfront planning:** Wrong call. This was the project's biggest
-architectural mistake. Having Scout plan the entire application upfront meant
-nothing could be deployed until most of the work was done. Progressive planning
-(minimal viable subset → deploy → higher-fidelity passes) would have produced
-a deployable application much earlier and provided feedback loops that the
-monolithic approach denied.
+**User-voiced brief over system-specification brief:** Right call,
+discovered late. Describing what the user should see and experience
+produced more coherent output than describing what the system should do
+internally. This is the single most impactful prompt engineering finding
+of the project.
 
-**finishBead deterministic gate:** Right call. The self-reporting requirement,
-parent-branch diffing, and automatic debt creation are the pipeline's most
-valuable safety mechanisms. The bypass mode for inherited failures is a pragmatic
-compromise — strict rejection would stall the pipeline on pre-existing issues.
+**finishBead deterministic gate:** Right call. The self-reporting
+requirement, parent-branch diffing, and automatic debt creation are the
+pipeline's most valuable safety mechanisms. The bypass mode for inherited
+failures is a pragmatic compromise.
+
+**Judicar triage agent:** Right call, added mid-week. Without economic
+filtering, the Warden created dozens of polish beads that consumed Trench
+sessions better spent on features. The Judicar's "pattern over instance"
+principle was particularly effective at collapsing duplicate beads.
 
 ### 7. If You Built It Again
 
-**Progressive planning over monolithic.** The single biggest change. Instead of
-Scout generating all work items upfront, have it plan a minimal deployable
-subset, build and deploy that, then plan the next layer of functionality. This
-produces working software earlier, enables feedback loops, and avoids the
-"nothing works until everything works" failure mode that made the 70% completion
-state feel incomplete despite substantial functionality.
+**Progressive planning over monolithic.** We actually did this — the final
+builds used phased planning (MVP subset → expand → polish) instead of
+upfront full planning. It worked dramatically better. The earlier
+monolithic approach meant nothing was deployable until most work was done.
 
-**Enforce work item size limits at creation time.** Scout should be constrained
-to produce beads no larger than N lines of estimated change. The current
-approach of letting Trench request resizes after discovering a bead is too large
-wastes tokens and session time. Better to over-split upfront.
+**User-voiced briefs from the start.** The shift from "the system shall..."
+to "the user sees..." should have happened on day one instead of day five.
 
-**Shared read-only context between agents.** Subagent isolation is correct for
-writes, but agents should be able to share file-read caches. Currently, every
-subagent must re-read files the parent already read, which wastes tokens.
+**Pin dependencies aggressively.** The br SQLite bug cost multiple
+restarts. The fix existed upstream for 23 days. An auto-update script or
+version pinning to latest would have prevented hours of debugging.
 
-**Post-edit type checking as middleware.** OpenCode runs LSP diagnostics after
-every edit. We deferred this and relied on the finishBead gate to catch type
-errors. Moving type checking earlier (immediately after each edit) would catch
-errors before they compound.
+**Shared read-only context between agents.** Subagent isolation is correct
+for writes, but agents should share file-read caches to avoid redundant
+reads that waste tokens.
 
-**Force the agent to consult the original.** The agent never used the tool to
-read the original Ship source. In a future iteration, the brief should include
-a mandatory research phase: "Before planning, read the original application's
-schema, routes, and component structure. Document what you observe." This would
-surface domain patterns the agent currently has to reinvent.
+**Post-edit type checking as middleware.** Moving type checking immediately
+after each edit (instead of at the finishBead gate) would catch errors
+before they compound across multiple edits in a session.
 
-**Context budget per session.** Rather than letting agents run until they hit
-the 800K cap, enforce a soft budget (e.g., 200K) that triggers a graceful exit
-and bead resize. This would convert hard failures into planned handoffs earlier.
+**Build the Judicar earlier.** The economic filter that prevents
+unnecessary work from consuming compute should be a day-one feature, not
+a mid-week addition.
+
+**Multi-cylinder pipeline.** The current architecture is single-cylinder:
+Tower plans an entire phase of 8–15 beads, then the Summoner dispatches
+them to parallel slots. This breaks down because Tower plans against
+stale state (by bead 8, beads 1–7 have changed the codebase), the unit
+of parallelism is wrong (random beads from a flat list race each other
+and cause merge conflicts), and integration verification is deferred to
+phase end (problems compound instead of surfacing immediately).
+
+The redesign (documented in `notes/design-multi-cylinder-pipeline.md`)
+restructures the pipeline around **flows** — user-capability-scoped
+sequences of steps. Tower becomes a product planner that thinks in user
+capabilities ("a member can create an issue in their program"), not
+implementation tasks ("add issues routes"). A new **Groomer** agent
+decomposes each feature into concrete implementation steps just-in-time,
+reading the codebase minutes before execution instead of hours before.
+Each flow runs as a sequential chain on a single worktree — no merge
+conflicts within a flow. Flows that touch different areas of the codebase
+run in parallel across worktrees. Integration verification happens per-flow,
+not per-phase, so problems surface immediately instead of accumulating.
+
+This is the actual "build it again" plan — not hypothetical, currently
+being implemented.
 
 ---
 

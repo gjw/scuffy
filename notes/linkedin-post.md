@@ -2,27 +2,20 @@
 
 ## Post Text
 
-I built an autonomous coding agent from scratch in TypeScript, then pointed it at a real project and walked away.
+Week 6 of Gauntlet for America. This one was different — instead of building an app, I built the thing that builds the app.
 
-Scuffy is a custom agent loop -- no LangChain, no LangGraph, just direct LLM calls with surgical file editing, JSONL observability, and a multi-agent pipeline. A Summoner dispatches work to parallel Trench agents. A Warden audits their output. A Tower plans and replans when things go wrong. The whole system runs against a dependency graph of work items, picking up tasks in the right order and resolving its own merge conflicts.
+Scuffy is an autonomous coding agent. Custom TypeScript agent loop, no LangGraph, no LangChain. The interesting part isn't the agent itself — that's a while loop over the Claude API with some tools. The interesting part is the pipeline around it.
 
-The real test: I gave Scuffy a business requirements brief for a project management application and told it to build the thing. It generated its own work items, chose its own architecture (React + Express + SQLite), and built 14,762 lines of functional code across 274 sessions. One human intervention was required -- an OOM hardlock that needed a process kill. Everything else was autonomous.
+Five agent roles: a Summoner that orchestrates, a Scout that reads a business brief and generates work items, Trench agents that write code in parallel git worktrees, a Warden that audits their output, and a Judicar that triages failures and eliminates unnecessary work before it burns compute.
 
-Two details I did not expect. First, the agent had a tool to read the original application's source code. It never used it. Not once. It worked entirely from the requirements brief. Second, without any instruction about UI density, it produced informationally dense dashboard views with inline editing, bulk actions, and contextual filtering. Nobody asked for that.
+The part I spent the most time on: agents are not trusted to verify their own work. They run in a sandbox and cannot execute tests or commit code. When a Trench finishes, it calls a deterministic completion gate that runs typecheck, lint, and tests itself — then diffs the actual changed files against what the agent claimed it changed. If it under-reported, the submission is rejected. If the failures existed before the agent touched the code, they're accepted but a high-priority ticket is automatically created so the next agent picks them up. The agents never see the test results until after they've declared what they did.
 
-[SCREENSHOT: Ship rebuild dashboard showing the activity feed and planning board side by side]
+Agents can also mail the human or other agents about ambiguous decisions — architecture choices, domain interpretation, API design tradeoffs. They don't block; they log what they decided and why, then keep working. Those reports feed into the next run's brief, so the pipeline gets smarter across restarts.
 
-This is not production-grade software engineering. The agent bypassed its own test failures more often than I would like, and Warden audits created polish work that consumed sessions better spent on features. But the core loop -- plan, build, test, audit, merge -- ran overnight and produced a working application by morning.
-
-[SCREENSHOT: Scuffy's JSONL session log showing a Trench agent completing a bead in 3 minutes]
+The integration test: point the pipeline at a business requirements brief for Ship and tell it to build the app from scratch. No technical spec, no original source code, just requirements. The agent chose its own stack, generated its own work items, and built the application autonomously across hundreds of sessions. I restarted the pipeline 30-50 times over the week — not patching the output, but improving the architecture and starting over each time.
 
 Built during @GauntletAI Shipyard.
 
-[SCREENSHOT: Terminal showing Summoner dispatching two parallel Trench agents into git worktrees]
+Submitted. But I have new ideas. Just one more build.
 
-## Screenshot Plan
-
-- **Dashboard UI**: The rebuilt Ship app's main dashboard, showing the activity feed and planning board to demonstrate the UI density the agent produced unprompted
-- **Session log**: A JSONL log excerpt (formatted with jq) showing a single Trench session from claim to completion, highlighting the 2-5 minute cycle time
-- **Summoner terminal**: The Summoner process dispatching parallel Trench agents, showing worktree creation and bead assignment -- demonstrates the multi-agent coordination
-- **Bead graph (optional)**: A bv dependency graph (mermaid or dot format rendered) showing the work item structure the agent generated from the requirements brief
+[ATTACH: Loom demo video link]
