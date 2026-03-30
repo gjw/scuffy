@@ -33,6 +33,8 @@ the comparative analysis documents every shortcoming honestly.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System design, data model, API surface, invariants |
 | [traces/](traces/) | JSONL session traces (normal run, error recovery, multi-agent) |
 | [docs/](docs/) | Case studies: [OOM hardlock](docs/case-study-oom-hardlock.md), [polite trench](docs/case-study-polite-trench.md), [phase leak](docs/case-study-phase-leak.md) |
+| [notes/run-timeline.md](notes/run-timeline.md) | Build timeline for the final Ship rebuild run |
+| [notes/Scuffy Factory Dashboard.htm](notes/Scuffy%20Factory%20Dashboard.htm) | Dashboard snapshot from the final build (open in browser) |
 
 ## Quick Start
 
